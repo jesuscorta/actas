@@ -72,3 +72,19 @@ export default defineConfig([
 ])
 ```
 # actas
+
+## API (Node + MySQL)
+
+The API lives in `server/` and stores the full app state (notes + clients) in MySQL.
+
+Environment variables:
+- `DB_HOST` (e.g. `db`)
+- `DB_PORT` (default `3306`)
+- `DB_USER` (e.g. `admin`)
+- `DB_PASSWORD`
+- `DB_NAME` (e.g. `mysql` or your own db name)
+- `PORT` (default `3000`)
+- `CORS_ORIGIN` (frontend URL or `*`)
+
+Frontend env:
+- `VITE_API_BASE_URL` (e.g. `https://api.actas-dev.jesuscorta.es`)

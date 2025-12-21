@@ -12,6 +12,10 @@ import Mention from '@tiptap/extension-mention'
 import { mergeAttributes } from '@tiptap/core'
 import './index.css'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
+  : ''
+
 type Note = {
   id: string
   title: string
@@ -235,6 +239,39 @@ function App() {
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
 
+  const normalizeNotes = useCallback((rawNotes: Note[]) => {
+    return sortNotes(
+      rawNotes.map((note) => ({
+        ...note,
+        meetingType: note.meetingType || 'cliente',
+        preNotes: note.preNotes || '',
+        nextSteps: note.nextSteps || '',
+        nextTasks: Array.isArray(note.nextTasks)
+          ? note.nextTasks
+          : Array.isArray((note as any).nextTasks)
+            ? ((note as any).nextTasks as any[]).map((t) => ({
+                id: t.id || nanoid(),
+                text: t.text || '',
+                done: Boolean(t.done),
+              }))
+            : [],
+      })),
+    )
+  }, [])
+
+  const syncState = useCallback(async (notesToSave: Note[], clientsToSave: string[]) => {
+    if (!API_BASE) return
+    try {
+      await fetch(`${API_BASE}/api/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: notesToSave, clients: clientsToSave }),
+      })
+    } catch (error) {
+      console.error('Sync error', error)
+    }
+  }, [])
+
   const jumpToNote = useCallback(
     (noteId: string) => {
       const note = notesRef.current.find((n) => n.id === noteId)
@@ -256,28 +293,33 @@ function App() {
     [setDraft],
   )
 
+  const informUpdatedDraft = useCallback((storedNotes: Note[]) => {
+    if (storedNotes.length) {
+      const first = storedNotes[0]
+      setSelectedId(first.id)
+      setDraft({
+        id: first.id,
+        title: first.title,
+        client: first.client,
+        date: first.date,
+        meetingType: first.meetingType || 'cliente',
+        preNotes: first.preNotes || '',
+        content: first.content,
+        nextSteps: first.nextSteps || '',
+        nextTasks: first.nextTasks || [],
+      })
+    } else {
+      setSelectedId(null)
+      setDraft(emptyDraft())
+    }
+  }, [setDraft, setSelectedId])
+
   useEffect(() => {
     setBackupSupported(typeof window !== 'undefined' && 'showDirectoryPicker' in window)
 
-    const load = async () => {
+    const loadFromStorage = async () => {
       const storedNotesRaw = (await storage.getItem<Note[]>('notes')) || []
-      const storedNotes = sortNotes(
-        storedNotesRaw.map((note) => ({
-          ...note,
-          meetingType: note.meetingType || 'cliente',
-          preNotes: note.preNotes || '',
-          nextSteps: note.nextSteps || '',
-          nextTasks: Array.isArray(note.nextTasks)
-            ? note.nextTasks
-            : Array.isArray((note as any).nextTasks)
-              ? ((note as any).nextTasks as any[]).map((t) => ({
-                  id: t.id || nanoid(),
-                  text: t.text || '',
-                  done: Boolean(t.done),
-                }))
-              : [],
-        })),
-      )
+      const storedNotes = normalizeNotes(storedNotesRaw)
       const storedClients = (await storage.getItem<string[]>('clients')) || []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
@@ -287,29 +329,42 @@ function App() {
 
       setClients(combinedClients)
       setNotes(storedNotes)
-
-      if (storedNotes.length) {
-        setSelectedId(storedNotes[0].id)
-        setDraft({
-          id: storedNotes[0].id,
-          title: storedNotes[0].title,
-          client: storedNotes[0].client,
-          date: storedNotes[0].date,
-          meetingType: storedNotes[0].meetingType || 'cliente',
-          preNotes: storedNotes[0].preNotes || '',
-          content: storedNotes[0].content,
-          nextSteps: storedNotes[0].nextSteps || '',
-          nextTasks: storedNotes[0].nextTasks || [],
-        })
-      } else {
-        setDraft(emptyDraft())
-      }
-
+      informUpdatedDraft(storedNotes)
       setLoading(false)
     }
 
-    void load()
-  }, [])
+    const loadFromApi = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/state`)
+        if (!res.ok) {
+          throw new Error(`API failed: ${res.status}`)
+        }
+        const data = (await res.json()) as { notes?: Note[]; clients?: string[] }
+        const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
+        const storedClients = Array.isArray(data.clients) ? data.clients : []
+        const combinedClients = sortClients([
+          ...DEFAULT_CLIENTS,
+          ...storedClients,
+          ...storedNotes.map((note) => note.client),
+        ])
+        setClients(combinedClients)
+        setNotes(storedNotes)
+        await storage.setItem('notes', storedNotes)
+        await storage.setItem('clients', combinedClients)
+        informUpdatedDraft(storedNotes)
+        setLoading(false)
+      } catch (error) {
+        console.error('API load error', error)
+        await loadFromStorage()
+      }
+    }
+
+    if (API_BASE) {
+      void loadFromApi()
+    } else {
+      void loadFromStorage()
+    }
+  }, [informUpdatedDraft, normalizeNotes])
 
   useEffect(() => {
     if (!backupSupported) return
@@ -678,6 +733,7 @@ function App() {
       }
       const next = sortClients([...prev, cleaned])
       void storage.setItem('clients', next)
+      void syncState(notesRef.current, next)
       return next
     })
 
@@ -773,6 +829,7 @@ function App() {
     nextNotes = sortNotes(nextNotes)
     setNotes(nextNotes)
     await storage.setItem('notes', nextNotes)
+    await syncState(nextNotes, clients)
     if (backupDir) {
       await writeBackup(backupDir, nextNotes, clients)
     }
@@ -935,6 +992,7 @@ function App() {
         setClients(updatedClients)
         await storage.setItem('notes', mergedNotes)
         await storage.setItem('clients', updatedClients)
+        await syncState(mergedNotes, updatedClients)
         setMessage('Importación lista')
         setTimeout(() => setMessage(null), 1500)
       },
@@ -1032,6 +1090,7 @@ function App() {
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
     await storage.setItem('notes', remaining)
+    await syncState(remaining, clients)
     if (backupDir) {
       await writeBackup(backupDir, remaining, clients)
     }
@@ -1065,15 +1124,22 @@ function App() {
     setClients((prev) => {
       const next = [...prev]
       next[index] = cleaned
-      return sortClients(next)
+      const sorted = sortClients(next)
+      void storage.setItem('clients', sorted)
+      void syncState(notesRef.current, sorted)
+      return sorted
     })
   }
 
   const handleClientDelete = (name: string) => {
-    setClients((prev) => prev.filter((c) => c !== name))
-    setNotes((prev) =>
-      prev.map((note) => (note.client === name ? { ...note, client: '' } : note)),
+    const nextClients = clients.filter((c) => c !== name)
+    const updatedNotes = notes.map((note) =>
+      note.client === name ? { ...note, client: '' } : note,
     )
+    setClients(nextClients)
+    setNotes(updatedNotes)
+    void storage.setItem('clients', nextClients)
+    void syncState(updatedNotes, nextClients)
   }
 
   const handleClientAdd = () => {
