@@ -26,7 +26,9 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 })
 
+let schemaReady = false
 const ensureSchema = async () => {
+  if (schemaReady) return
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
       id TINYINT NOT NULL PRIMARY KEY,
@@ -34,6 +36,7 @@ const ensureSchema = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `)
+  schemaReady = true
 }
 
 const coerceState = (payload) => {
@@ -48,6 +51,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/state', async (_req, res) => {
   try {
+    await ensureSchema()
     const [rows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
     if (!rows.length) {
       res.json({ notes: [], clients: [] })
@@ -64,6 +68,7 @@ app.get('/api/state', async (_req, res) => {
 
 app.put('/api/state', async (req, res) => {
   try {
+    await ensureSchema()
     const state = coerceState(req.body)
     await pool.query(
       'INSERT INTO app_state (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
@@ -77,7 +82,6 @@ app.put('/api/state', async (req, res) => {
 })
 
 const start = async () => {
-  await ensureSchema()
   app.listen(Number(PORT), () => {
     console.log(`actas api listening on ${PORT}`)
   })
