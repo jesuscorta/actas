@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { nanoid } from 'nanoid'
 import localforage from 'localforage'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -70,6 +69,8 @@ function NotasPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [clients, setClients] = useState<string[]>(DEFAULT_CLIENTS)
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
+  const [showClientManager, setShowClientManager] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
   const filteredClients = useMemo(() => {
     const q = draft.client.trim().toLowerCase()
     const base = q ? clients.filter((c) => c.toLowerCase().includes(q)) : clients
@@ -177,6 +178,17 @@ const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
   setSaving(true)
 }
 
+const ensureClientExists = async (clientName: string) => {
+  const cleaned = clientName.trim()
+  if (!cleaned) return
+  setClients((prev) => {
+    if (prev.some((c) => c.toLowerCase() === cleaned.toLowerCase())) return prev
+    const next = [...prev, cleaned].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+    void storage.setItem('clients', next)
+    return next
+  })
+}
+
   const handleNewNote = () => {
     setSelectedId(null)
     setDraft(emptyDraft())
@@ -260,6 +272,68 @@ const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
     return () => clearTimeout(timeout)
   }, [saving, draft])
 
+  const handleDeleteNote = async () => {
+    if (!selectedId) return
+    const confirmDelete = window.confirm('¿Eliminar esta nota? Esta acción no se puede deshacer.')
+    if (!confirmDelete) return
+    const remaining = notes.filter((note) => note.id !== selectedId)
+    setNotes(remaining)
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(remaining))
+    if (remaining.length) {
+      const next = remaining[0]
+      setSelectedId(next.id)
+      setDraft({
+        id: next.id,
+        title: next.title,
+        client: next.client,
+        date: next.date,
+        content: next.content,
+      })
+      if (editor) {
+        editor.commands.setContent(next.content || '<p></p>', { emitUpdate: false })
+      }
+    } else {
+      setSelectedId(null)
+      setDraft(emptyDraft())
+      if (editor) {
+        editor.commands.setContent('<p></p>', { emitUpdate: false })
+      }
+    }
+    setMessage('Nota eliminada')
+    setTimeout(() => setMessage(null), 1200)
+  }
+
+  const handleClientUpdate = (index: number, value: string) => {
+    const cleaned = value.trim()
+    if (!cleaned) return
+    setClients((prev) => {
+      const next = [...prev]
+      next[index] = cleaned
+      const sorted = Array.from(new Set(next)).sort((a, b) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' }),
+      )
+      void storage.setItem('clients', sorted)
+      return sorted
+    })
+  }
+
+  const handleClientDelete = (name: string) => {
+    const nextClients = clients.filter((c) => c !== name)
+    const updatedNotes = notes.map((note) =>
+      note.client === name ? { ...note, client: '' } : note,
+    )
+    setClients(nextClients)
+    setNotes(updatedNotes)
+    void storage.setItem('clients', nextClients)
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes))
+  }
+
+  const handleClientAdd = () => {
+    if (!newClientName.trim()) return
+    void ensureClientExists(newClientName.trim())
+    setNewClientName('')
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-3 py-6 text-slate-900 sm:px-5">
       <div className="mx-auto flex max-w-7xl flex-col gap-4">
@@ -276,12 +350,26 @@ const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
             >
               + Nueva nota
             </button>
-            <Link
-              to="/actas"
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
+            <button
+              type="button"
+              onClick={() => setShowClientManager(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
             >
-              Ir a actas
-            </Link>
+              <svg
+                aria-hidden
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.4 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 3.6 9.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H22a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+              </svg>
+              <span className="sr-only">Gestionar clientes</span>
+            </button>
             {message && <span className="text-xs font-semibold text-emerald-700">{message}</span>}
           </div>
         </header>
@@ -346,6 +434,32 @@ const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
                 <span className="text-xs text-slate-500">
                   Última edición: {formatDate(selectedNote.updatedAt)}
                 </span>
+              )}
+              {selectedId && (
+                <button
+                  type="button"
+                  onClick={handleDeleteNote}
+                  className="ml-auto flex h-9 w-9 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm transition hover:bg-red-50"
+                  aria-label="Eliminar nota"
+                  title="Eliminar nota"
+                >
+                  <svg
+                    aria-hidden
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                </button>
               )}
             </div>
 
@@ -492,6 +606,74 @@ const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
           </main>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={handleNewNote}
+        className="fixed bottom-5 right-5 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200 sm:bottom-6 sm:right-6"
+        aria-label="Nueva nota"
+      >
+        <span className="text-xl font-bold leading-none">＋</span>
+      </button>
+      {showClientManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Clientes</p>
+                <h2 className="text-lg font-bold text-slate-900">Gestionar clientes</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClientManager(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100"
+                aria-label="Cerrar"
+              >
+                <span className="text-lg leading-none">✕</span>
+              </button>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="Nuevo cliente"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              />
+              <button
+                type="button"
+                onClick={handleClientAdd}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+              >
+                Añadir
+              </button>
+            </div>
+            <div className="mt-4 max-h-96 overflow-auto rounded-xl border border-slate-200">
+              {clients.map((client, index) => (
+                <div
+                  key={client}
+                  className="flex items-center gap-2 border-b border-slate-100 bg-white px-3 py-2 last:border-b-0"
+                >
+                  <input
+                    type="text"
+                    defaultValue={client}
+                    onBlur={(e) => handleClientUpdate(index, e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleClientDelete(client)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50"
+                    aria-label={`Eliminar ${client}`}
+                    title={`Eliminar ${client}`}
+                  >
+                    <span className="text-base leading-none">✕</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
