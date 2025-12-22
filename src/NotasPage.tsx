@@ -8,6 +8,11 @@ import Underline from '@tiptap/extension-underline'
 import LinkExtension from '@tiptap/extension-link'
 import { DEFAULT_CLIENTS } from './constants/clients'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
+  : ''
+const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
+
 type QuickNote = {
   id: string
   title: string
@@ -18,6 +23,8 @@ type QuickNote = {
   updatedAt: string
 }
 
+type MeetingNote = Record<string, any>
+
 type QuickNoteDraft = {
   id?: string
   title: string
@@ -25,8 +32,6 @@ type QuickNoteDraft = {
   date: string
   content: string
 }
-
-const NOTES_STORAGE_KEY = 'quick_notes'
 const storage = localforage.createInstance({
   name: 'actas',
   storeName: 'actas_store',
@@ -71,34 +76,90 @@ function NotasPage() {
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
   const [showClientManager, setShowClientManager] = useState(false)
   const [newClientName, setNewClientName] = useState('')
+  const [actasMirror, setActasMirror] = useState<MeetingNote[]>([])
   const filteredClients = useMemo(() => {
     const q = draft.client.trim().toLowerCase()
     const base = q ? clients.filter((c) => c.toLowerCase().includes(q)) : clients
     return base.slice(0, 12)
   }, [clients, draft.client])
 
-  useEffect(() => {
+  const loadFromStorage = async () => {
+    const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
+    const storedClients = (await storage.getItem<string[]>('clients')) || []
+    const storedActas = (await storage.getItem<MeetingNote[]>('notes')) || []
+    const combinedClients = Array.from(
+      new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
+    ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+
+    const sorted = sortQuickNotes(storedQuickNotes)
+    setNotes(sorted)
+    setClients(combinedClients)
+    setActasMirror(storedActas)
+    if (sorted[0]) {
+      setSelectedId(sorted[0].id)
+      setDraft({
+        id: sorted[0].id,
+        title: sorted[0].title,
+        client: sorted[0].client,
+        date: sorted[0].date,
+        content: sorted[0].content,
+      })
+      if (editor) {
+        editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
+      }
+    }
+  }
+
+  const loadFromApi = async () => {
     try {
-      const raw = localStorage.getItem(NOTES_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as QuickNote[]
-      if (Array.isArray(parsed)) {
-        const sorted = sortQuickNotes(parsed)
-        setNotes(sorted)
-        if (sorted[0]) {
-          setSelectedId(sorted[0].id)
-          setDraft({
-            id: sorted[0].id,
-            title: sorted[0].title,
-            client: sorted[0].client,
-            date: sorted[0].date,
-            content: sorted[0].content,
-          })
+      const res = await fetch(`${API_BASE}/api/state`, {
+        headers: {
+          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+        },
+      })
+      if (!res.ok) {
+        throw new Error(`API failed: ${res.status}`)
+      }
+      const data = (await res.json()) as { notes?: MeetingNote[]; clients?: string[]; quickNotes?: QuickNote[] }
+      const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
+      const storedClients = Array.isArray(data.clients) ? data.clients : []
+      const storedActas = Array.isArray(data.notes) ? data.notes : []
+      const combinedClients = Array.from(
+        new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
+      ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+      const sorted = sortQuickNotes(storedQuickNotes)
+      setNotes(sorted)
+      setClients(combinedClients)
+      setActasMirror(storedActas)
+      await storage.setItem('quickNotes', sorted)
+      await storage.setItem('clients', combinedClients)
+      await storage.setItem('notes', storedActas)
+      if (sorted[0]) {
+        setSelectedId(sorted[0].id)
+        setDraft({
+          id: sorted[0].id,
+          title: sorted[0].title,
+          client: sorted[0].client,
+          date: sorted[0].date,
+          content: sorted[0].content,
+        })
+        if (editor) {
+          editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
         }
       }
     } catch (error) {
-      console.error('No se pudieron cargar notas rápidas', error)
+      console.error('API load error', error)
+      await loadFromStorage()
     }
+  }
+
+  useEffect(() => {
+    if (API_BASE) {
+      void loadFromApi()
+    } else {
+      void loadFromStorage()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -168,26 +229,51 @@ function NotasPage() {
     })
   }, [notes, filters])
 
-const selectedNote = useMemo(
-  () => notes.find((n) => n.id === selectedId) || null,
-  [notes, selectedId],
-)
+  const selectedNote = useMemo(
+    () => notes.find((n) => n.id === selectedId) || null,
+    [notes, selectedId],
+  )
 
-const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
-  setDraft((prev) => ({ ...prev, ...patch }))
-  setSaving(true)
-}
+  const syncState = async (
+    quickNotesToSave: QuickNote[],
+    clientsToSave: string[],
+    actasToSave: MeetingNote[],
+  ) => {
+    if (!API_BASE) return
+    try {
+      await fetch(`${API_BASE}/api/state`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+        },
+        body: JSON.stringify({
+          notes: actasToSave,
+          clients: clientsToSave,
+          quickNotes: quickNotesToSave,
+        }),
+      })
+    } catch (error) {
+      console.error('Sync error', error)
+    }
+  }
 
-const ensureClientExists = async (clientName: string) => {
-  const cleaned = clientName.trim()
-  if (!cleaned) return
-  setClients((prev) => {
-    if (prev.some((c) => c.toLowerCase() === cleaned.toLowerCase())) return prev
-    const next = [...prev, cleaned].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
-    void storage.setItem('clients', next)
-    return next
-  })
-}
+  const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
+    setDraft((prev) => ({ ...prev, ...patch }))
+    setSaving(true)
+  }
+
+  const ensureClientExists = async (clientName: string) => {
+    const cleaned = clientName.trim()
+    if (!cleaned) return
+    setClients((prev) => {
+      if (prev.some((c) => c.toLowerCase() === cleaned.toLowerCase())) return prev
+      const next = [...prev, cleaned].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+      void storage.setItem('clients', next)
+      void syncState(notes, next, actasMirror)
+      return next
+    })
+  }
 
   const handleNewNote = () => {
     setSelectedId(null)
@@ -258,7 +344,8 @@ const ensureClientExists = async (clientName: string) => {
 
     const sorted = sortQuickNotes(nextNotes)
     setNotes(sorted)
-    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(sorted))
+    await storage.setItem('quickNotes', sorted)
+    await syncState(sorted, clients, actasMirror)
     setSaving(false)
     setMessage('Nota guardada')
     setTimeout(() => setMessage(null), 1200)
@@ -278,7 +365,8 @@ const ensureClientExists = async (clientName: string) => {
     if (!confirmDelete) return
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
-    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(remaining))
+    await storage.setItem('quickNotes', remaining)
+    await syncState(remaining, clients, actasMirror)
     if (remaining.length) {
       const next = remaining[0]
       setSelectedId(next.id)
@@ -313,6 +401,7 @@ const ensureClientExists = async (clientName: string) => {
         a.localeCompare(b, 'es', { sensitivity: 'base' }),
       )
       void storage.setItem('clients', sorted)
+      void syncState(notes, sorted, actasMirror)
       return sorted
     })
   }
@@ -325,7 +414,8 @@ const ensureClientExists = async (clientName: string) => {
     setClients(nextClients)
     setNotes(updatedNotes)
     void storage.setItem('clients', nextClients)
-    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes))
+    void storage.setItem('quickNotes', updatedNotes)
+    void syncState(updatedNotes, nextClients, actasMirror)
   }
 
   const handleClientAdd = () => {

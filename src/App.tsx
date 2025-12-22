@@ -44,6 +44,16 @@ type NoteDraft = {
   nextTasks: { id: string; text: string; done: boolean }[]
 }
 
+type QuickNote = {
+  id: string
+  title: string
+  client: string
+  date: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 type Filters = {
   search: string
   client: string
@@ -141,6 +151,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [clients, setClients] = useState<string[]>(sortClients(DEFAULT_CLIENTS))
   const [filters, setFilters] = useState<Filters>({ search: '', client: 'all', date: '' })
+  const [quickNotesCache, setQuickNotesCache] = useState<QuickNote[]>([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -181,21 +192,28 @@ function App() {
     )
   }, [])
 
-  const syncState = useCallback(async (notesToSave: Note[], clientsToSave: string[]) => {
-    if (!API_BASE) return
-    try {
-      await fetch(`${API_BASE}/api/state`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
-        },
-        body: JSON.stringify({ notes: notesToSave, clients: clientsToSave }),
-      })
-    } catch (error) {
-      console.error('Sync error', error)
-    }
-  }, [])
+  const syncState = useCallback(
+    async (notesToSave: Note[], clientsToSave: string[], quickNotesToSave?: QuickNote[]) => {
+      if (!API_BASE) return
+      try {
+        await fetch(`${API_BASE}/api/state`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+          },
+          body: JSON.stringify({
+            notes: notesToSave,
+            clients: clientsToSave,
+            quickNotes: quickNotesToSave ?? quickNotesCache,
+          }),
+        })
+      } catch (error) {
+        console.error('Sync error', error)
+      }
+    },
+    [quickNotesCache],
+  )
 
   const jumpToNote = useCallback(
     (noteId: string) => {
@@ -244,14 +262,17 @@ function App() {
       const storedNotesRaw = (await storage.getItem<Note[]>('notes')) || []
       const storedNotes = normalizeNotes(storedNotesRaw)
       const storedClients = (await storage.getItem<string[]>('clients')) || []
+      const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
         ...storedClients,
         ...storedNotes.map((note) => note.client),
+        ...storedQuickNotes.map((note) => note.client),
       ])
 
       setClients(combinedClients)
       setNotes(storedNotes)
+      setQuickNotesCache(storedQuickNotes)
       informUpdatedDraft(storedNotes)
       setLoading(false)
     }
@@ -266,17 +287,21 @@ function App() {
         if (!res.ok) {
           throw new Error(`API failed: ${res.status}`)
         }
-        const data = (await res.json()) as { notes?: Note[]; clients?: string[] }
+        const data = (await res.json()) as { notes?: Note[]; clients?: string[]; quickNotes?: QuickNote[] }
         const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
+        const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
         const storedClients = Array.isArray(data.clients) ? data.clients : []
         const combinedClients = sortClients([
           ...DEFAULT_CLIENTS,
           ...storedClients,
           ...storedNotes.map((note) => note.client),
+          ...storedQuickNotes.map((note) => note.client),
         ])
         setClients(combinedClients)
         setNotes(storedNotes)
+        setQuickNotesCache(storedQuickNotes)
         await storage.setItem('notes', storedNotes)
+        await storage.setItem('quickNotes', storedQuickNotes)
         await storage.setItem('clients', combinedClients)
         informUpdatedDraft(storedNotes)
         setLoading(false)
@@ -632,7 +657,7 @@ function App() {
       }
       const next = sortClients([...prev, cleaned])
       void storage.setItem('clients', next)
-      void syncState(notesRef.current, next)
+      void syncState(notesRef.current, next, quickNotesCache)
       return next
     })
 
@@ -706,12 +731,12 @@ function App() {
     nextNotes = sortNotes(nextNotes)
     setNotes(nextNotes)
     await storage.setItem('notes', nextNotes)
-    await syncState(nextNotes, clients)
+    await syncState(nextNotes, clients, quickNotesCache)
     setDirty(false)
     setSaving(false)
     setMessage('Guardado')
     setTimeout(() => setMessage(null), 1200)
-  }, [draft, notes, ensureClientExists, clients, syncState])
+  }, [draft, notes, ensureClientExists, clients, quickNotesCache, syncState])
 
   useEffect(() => {
     if (!dirty) return
@@ -866,7 +891,7 @@ function App() {
         setClients(updatedClients)
         await storage.setItem('notes', mergedNotes)
         await storage.setItem('clients', updatedClients)
-        await syncState(mergedNotes, updatedClients)
+        await syncState(mergedNotes, updatedClients, quickNotesCache)
         setMessage('Importación lista')
         setTimeout(() => setMessage(null), 1500)
       },
@@ -930,7 +955,7 @@ function App() {
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
     await storage.setItem('notes', remaining)
-    await syncState(remaining, clients)
+    await syncState(remaining, clients, quickNotesCache)
 
     if (remaining.length > 0) {
       const next = remaining[0]
@@ -963,7 +988,7 @@ function App() {
       next[index] = cleaned
       const sorted = sortClients(next)
       void storage.setItem('clients', sorted)
-      void syncState(notesRef.current, sorted)
+      void syncState(notesRef.current, sorted, quickNotesCache)
       return sorted
     })
   }
@@ -976,7 +1001,7 @@ function App() {
     setClients(nextClients)
     setNotes(updatedNotes)
     void storage.setItem('clients', nextClients)
-    void syncState(updatedNotes, nextClients)
+    void syncState(updatedNotes, nextClients, quickNotesCache)
   }
 
   const handleClientAdd = () => {

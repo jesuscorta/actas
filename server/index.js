@@ -63,7 +63,8 @@ const ensureSchema = async () => {
 const coerceState = (payload) => {
   const notes = Array.isArray(payload?.notes) ? payload.notes : []
   const clients = Array.isArray(payload?.clients) ? payload.clients : []
-  return { notes, clients }
+  const quickNotes = Array.isArray(payload?.quickNotes) ? payload.quickNotes : []
+  return { notes, clients, quickNotes }
 }
 
 app.get('/api/health', (_req, res) => {
