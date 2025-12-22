@@ -4,7 +4,7 @@
 - **Datos**: Cada acta tiene título, cliente, fecha, tipo de reunión (cliente/interna), HTML de los 3 editores y checklist de tareas. Clientes gestionados con autocompletado y modal de administración.
 - **Estado local**: IndexedDB vía `localforage`. Auto-guardado a los 600 ms de editar; export/import CSV; copia a portapapeles en Markdown.
 - **Menciones**: `@` busca otras actas (por título/cliente/fecha) y enlaza; al click salta a esa acta.
-- **Backup local**: Soporte opcional (solo navegadores con File System Access API); guarda `actas-backup.json` en carpeta elegida.
+- **Backup**: Persistencia principal en MySQL vía API; no se usa ya el backup local en carpeta.
 
 ## Sincronización con API
 - **Endpoint**: si existe `VITE_API_BASE_URL`, la app sincroniza estado completo (notas + clientes) con `GET/PUT {VITE_API_BASE_URL}/api/state`. Si no está definido, solo usa IndexedDB.

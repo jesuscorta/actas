@@ -132,7 +132,6 @@ const storage = localforage.createInstance({
 })
 
 const turndown = new TurndownService()
-const BACKUP_HANDLE_KEY = 'backupDirHandle'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -230,8 +229,6 @@ function App() {
   const [showNewClient, setShowNewClient] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
-  const [backupDir, setBackupDir] = useState<FileSystemDirectoryHandle | null>(null)
-  const [backupSupported, setBackupSupported] = useState(false)
   const [showClientManager, setShowClientManager] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notesRef = useRef<Note[]>([])
@@ -319,8 +316,6 @@ function App() {
   }, [setDraft, setSelectedId])
 
   useEffect(() => {
-    setBackupSupported(typeof window !== 'undefined' && 'showDirectoryPicker' in window)
-
     const loadFromStorage = async () => {
       const storedNotesRaw = (await storage.getItem<Note[]>('notes')) || []
       const storedNotes = normalizeNotes(storedNotesRaw)
@@ -373,34 +368,6 @@ function App() {
       void loadFromStorage()
     }
   }, [informUpdatedDraft, normalizeNotes])
-
-  useEffect(() => {
-    if (!backupSupported) return
-    const loadBackupHandle = async () => {
-      try {
-        const storedHandle = await storage.getItem<FileSystemDirectoryHandle>(BACKUP_HANDLE_KEY)
-        if (!storedHandle) return
-        if ('queryPermission' in storedHandle) {
-          const perm = await (storedHandle as any).queryPermission?.({ mode: 'readwrite' })
-          if (perm === 'granted') {
-            setBackupDir(storedHandle)
-            return
-          }
-          if (perm === 'prompt') {
-            const req = await (storedHandle as any).requestPermission?.({ mode: 'readwrite' })
-            if (req === 'granted') {
-              setBackupDir(storedHandle)
-              return
-            }
-          }
-        }
-        await storage.removeItem(BACKUP_HANDLE_KEY)
-      } catch (error) {
-        console.error('Error cargando backup handle', error)
-      }
-    }
-    void loadBackupHandle()
-  }, [backupSupported])
 
   useEffect(() => {
     notesRef.current = notes
@@ -755,28 +722,6 @@ function App() {
     setDirty(true)
   }
 
-  const writeBackup = useCallback(
-    async (dir: FileSystemDirectoryHandle, notesToSave: Note[], clientsToSave: string[]) => {
-      try {
-        const handle = await dir.getFileHandle('actas-backup.json', { create: true })
-        const writable = await handle.createWritable()
-        const payload = {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          notes: notesToSave,
-          clients: clientsToSave,
-        }
-        await writable.write(JSON.stringify(payload, null, 2))
-        await writable.close()
-      } catch (error) {
-        console.error('Backup error', error)
-        setMessage('No se pudo guardar backup')
-        setTimeout(() => setMessage(null), 1500)
-      }
-    },
-    [],
-  )
-
   const saveDraft = useCallback(async () => {
     if (!draft) return
     const isEmpty =
@@ -838,14 +783,11 @@ function App() {
     setNotes(nextNotes)
     await storage.setItem('notes', nextNotes)
     await syncState(nextNotes, clients)
-    if (backupDir) {
-      await writeBackup(backupDir, nextNotes, clients)
-    }
     setDirty(false)
     setSaving(false)
     setMessage('Guardado')
     setTimeout(() => setMessage(null), 1200)
-  }, [draft, notes, ensureClientExists, backupDir, clients, writeBackup])
+  }, [draft, notes, ensureClientExists, clients, syncState])
 
   useEffect(() => {
     if (!dirty) return
@@ -1011,40 +953,6 @@ function App() {
     fileInputRef.current?.click()
   }
 
-  const handlePickBackupDir = async () => {
-    if (!backupSupported || typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
-      setMessage('Backup local requiere Chrome/Edge en escritorio')
-      setTimeout(() => setMessage(null), 1800)
-      return
-    }
-    try {
-      const dirHandle = await (window as any).showDirectoryPicker()
-      const perm = await dirHandle.requestPermission?.({ mode: 'readwrite' })
-      if (perm !== 'granted') {
-        setMessage('Permiso de escritura denegado')
-        setTimeout(() => setMessage(null), 1800)
-        return
-      }
-      setBackupDir(dirHandle)
-      await storage.setItem(BACKUP_HANDLE_KEY, dirHandle)
-      setMessage('Carpeta de backup configurada')
-      setTimeout(() => setMessage(null), 1500)
-    } catch (error) {
-      console.error('No se pudo elegir carpeta', error)
-    }
-  }
-
-  const handleManualBackup = async () => {
-    if (!backupDir) {
-      setMessage('Configura la carpeta de backup primero')
-      setTimeout(() => setMessage(null), 1500)
-      return
-    }
-    await writeBackup(backupDir, notes, clients)
-    setMessage('Backup guardado en carpeta')
-    setTimeout(() => setMessage(null), 1500)
-  }
-
   const handleAddClient = () => {
     const name = newClientName.trim()
     if (!name) return
@@ -1099,9 +1007,6 @@ function App() {
     setNotes(remaining)
     await storage.setItem('notes', remaining)
     await syncState(remaining, clients)
-    if (backupDir) {
-      await writeBackup(backupDir, remaining, clients)
-    }
 
     if (remaining.length > 0) {
       const next = remaining[0]
@@ -1192,47 +1097,6 @@ function App() {
               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
             >
               Importar CSV
-            </button>
-            <button
-              type="button"
-              onClick={handlePickBackupDir}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
-            >
-              <svg
-                aria-hidden
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-                <path d="M3 6a2 2 0 0 1 2-2h3" />
-              </svg>
-              <span className="sr-only">Carpeta backup</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleManualBackup}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
-            >
-              <svg
-                aria-hidden
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M7 3h10l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
-                <path d="M7 3v6h10V3" />
-                <path d="M10 17h4" />
-              </svg>
-              <span className="sr-only">Backup manual</span>
             </button>
             <button
               type="button"
