@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { nanoid } from 'nanoid'
+import localforage from 'localforage'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import Underline from '@tiptap/extension-underline'
+import LinkExtension from '@tiptap/extension-link'
+import { DEFAULT_CLIENTS } from './constants/clients'
 
 type QuickNote = {
   id: string
@@ -24,6 +28,10 @@ type QuickNoteDraft = {
 }
 
 const NOTES_STORAGE_KEY = 'quick_notes'
+const storage = localforage.createInstance({
+  name: 'actas',
+  storeName: 'actas_store',
+})
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -60,6 +68,13 @@ function NotasPage() {
   const [filters, setFilters] = useState({ search: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [clients, setClients] = useState<string[]>(DEFAULT_CLIENTS)
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false)
+  const filteredClients = useMemo(() => {
+    const q = draft.client.trim().toLowerCase()
+    const base = q ? clients.filter((c) => c.toLowerCase().includes(q)) : clients
+    return base.slice(0, 12)
+  }, [clients, draft.client])
 
   useEffect(() => {
     try {
@@ -85,10 +100,34 @@ function NotasPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const storedClients = (await storage.getItem<string[]>('clients')) || []
+        const combined = [...DEFAULT_CLIENTS, ...storedClients].filter(Boolean)
+        const unique = Array.from(new Set(combined)).sort((a, b) =>
+          a.localeCompare(b, 'es', { sensitivity: 'base' }),
+        )
+        setClients(unique)
+      } catch (error) {
+        console.error('No se pudieron cargar clientes', error)
+      }
+    }
+    void loadClients()
+  }, [])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
+      }),
+      Underline,
+      LinkExtension.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: {
+          class: 'text-emerald-700 underline underline-offset-2',
+        },
       }),
       Placeholder.configure({
         placeholder: 'Escribe tu nota rápida aquí…',
@@ -103,6 +142,7 @@ function NotasPage() {
     },
     onUpdate: ({ editor }) => {
       setDraft((prev) => ({ ...prev, content: editor.getHTML() }))
+      setSaving(true)
     },
   })
 
@@ -127,19 +167,21 @@ function NotasPage() {
     })
   }, [notes, filters])
 
-  const selectedNote = useMemo(
-    () => notes.find((n) => n.id === selectedId) || null,
-    [notes, selectedId],
-  )
+const selectedNote = useMemo(
+  () => notes.find((n) => n.id === selectedId) || null,
+  [notes, selectedId],
+)
 
-  const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
-    setDraft((prev) => ({ ...prev, ...patch }))
-  }
+const handleDraftChange = (patch: Partial<QuickNoteDraft>) => {
+  setDraft((prev) => ({ ...prev, ...patch }))
+  setSaving(true)
+}
 
   const handleNewNote = () => {
     setSelectedId(null)
     setDraft(emptyDraft())
     setMessage(null)
+    setSaving(false)
   }
 
   const handleSelectNote = (note: QuickNote) => {
@@ -163,6 +205,7 @@ function NotasPage() {
       !draft.client.trim() &&
       !stripHtml(draft.content || '').trim()
     if (isEmpty) {
+      setSaving(false)
       setMessage('No se guardó: la nota está vacía')
       setTimeout(() => setMessage(null), 1500)
       return
@@ -209,6 +252,14 @@ function NotasPage() {
     setTimeout(() => setMessage(null), 1200)
   }
 
+  useEffect(() => {
+    if (!saving) return
+    const timeout = setTimeout(() => {
+      void saveDraft()
+    }, 600)
+    return () => clearTimeout(timeout)
+  }, [saving, draft])
+
   return (
     <div className="min-h-screen bg-slate-50 px-3 py-6 text-slate-900 sm:px-5">
       <div className="mx-auto flex max-w-7xl flex-col gap-4">
@@ -224,15 +275,6 @@ function NotasPage() {
               className="rounded-full bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
               + Nueva nota
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void saveDraft()
-              }}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <Link
               to="/actas"
@@ -319,14 +361,41 @@ function NotasPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase text-slate-500">Cliente</label>
-                <input
-                  type="text"
-                  value={draft.client}
-                  onChange={(e) => handleDraftChange({ client: e.target.value })}
-                  placeholder="Cliente opcional"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                />
+                <label className="text-xs font-semibold uppercase text-slate-500">
+                  Cliente (elige o escribe uno nuevo)
+                </label>
+                <div className="relative w-full">
+                  <input
+                    type="search"
+                    value={draft.client}
+                    onChange={(e) => handleDraftChange({ client: e.target.value })}
+                    onFocus={() => setShowClientSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowClientSuggestions(false), 120)}
+                    placeholder="Buscar o seleccionar cliente"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {showClientSuggestions && filteredClients.length > 0 && (
+                    <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                      {filteredClients.map((client) => (
+                        <button
+                          key={client}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            handleDraftChange({ client })
+                            setShowClientSuggestions(false)
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-800 hover:bg-emerald-50"
+                        >
+                          <span>{client}</span>
+                        </button>
+                      ))}
+                      {filteredClients.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-500">Sin resultados</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-slate-500">Fecha</label>
@@ -342,7 +411,81 @@ function NotasPage() {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase text-slate-500">Contenido</p>
-                <span className="text-[11px] font-medium text-slate-400">Texto enriquecido</span>
+                <span className="text-[11px] font-medium text-slate-400">Auto-guardado</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                <ToolbarButton
+                  label="Negrita"
+                  onClick={() => editor?.chain().focus().toggleBold().run()}
+                  active={editor?.isActive('bold') || false}
+                >
+                  <span className="text-sm font-semibold">B</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Cursiva"
+                  onClick={() => editor?.chain().focus().toggleItalic().run()}
+                  active={editor?.isActive('italic') || false}
+                >
+                  <span className="text-sm italic">I</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Subrayado"
+                  onClick={() => editor?.chain().focus().toggleUnderline().run()}
+                  active={editor?.isActive('underline') || false}
+                >
+                  <span className="text-sm underline">U</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Lista"
+                  onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                  active={editor?.isActive('bulletList') || false}
+                >
+                  <span className="text-base leading-none">•</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Lista numerada"
+                  onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                  active={editor?.isActive('orderedList') || false}
+                >
+                  <span className="text-xs font-semibold">1.</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Encabezado H3"
+                  onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+                  active={editor?.isActive('heading', { level: 3 }) || false}
+                >
+                  <span className="text-[11px] font-semibold">H3</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Enlace"
+                  onClick={() => {
+                    const previousUrl = editor?.getAttributes('link').href
+                    const url = window.prompt('Pega el enlace', previousUrl || '')
+                    if (url === null) return
+                    if (url === '') {
+                      editor?.chain().focus().unsetLink().run()
+                      return
+                    }
+                    editor?.chain().focus().setLink({ href: url }).run()
+                  }}
+                  active={editor?.isActive('link') || false}
+                >
+                  <span className="text-sm">🔗</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Deshacer"
+                  onClick={() => editor?.chain().focus().undo().run()}
+                  active={false}
+                >
+                  <span className="text-base">↺</span>
+                </ToolbarButton>
+                <ToolbarButton
+                  label="Rehacer"
+                  onClick={() => editor?.chain().focus().redo().run()}
+                  active={false}
+                >
+                  <span className="text-base">↻</span>
+                </ToolbarButton>
               </div>
               <EditorContent editor={editor} />
             </div>
@@ -354,3 +497,28 @@ function NotasPage() {
 }
 
 export default NotasPage
+
+type ToolbarButtonProps = {
+  label: string
+  children: ReactNode
+  onClick: () => void
+  active: boolean
+}
+
+function ToolbarButton({ children, onClick, active, label }: ToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition ${
+        active
+          ? 'bg-emerald-600 text-white shadow-sm'
+          : 'border border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}

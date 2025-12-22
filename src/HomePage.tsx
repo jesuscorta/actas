@@ -3,16 +3,8 @@ import { Link } from 'react-router-dom'
 function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 px-4 py-8 text-slate-900">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary-700">Inicio</p>
-          <h1 className="text-2xl font-bold text-slate-950">Panel de trabajo</h1>
-          <p className="text-sm text-slate-600">
-            Accede rápido a las actas y a las notas rápidas de clientes.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
+      <div className="mx-auto flex min-h-[80vh] max-w-5xl items-center justify-center">
+        <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
           <Link
             to="/actas"
             className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
