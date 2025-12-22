@@ -10,11 +10,32 @@ const {
   DB_NAME = 'mysql',
   CORS_ORIGIN = '*',
   PORT = '3000',
+  API_KEY = '',
 } = process.env
 
 const app = express()
 app.use(cors({ origin: CORS_ORIGIN }))
 app.use(express.json({ limit: '5mb' }))
+
+const authMiddleware = (req, res, next) => {
+  // If no API_KEY is set, keep current behavior (useful for local dev).
+  if (!API_KEY) return next()
+
+  // Allow health check without auth to keep probes simple.
+  if (req.path === '/api/health') return next()
+
+  const headerKey = req.get('x-api-key')
+  const bearer = req.get('authorization')
+  const bearerToken = bearer?.startsWith('Bearer ') ? bearer.slice(7).trim() : null
+
+  const provided = headerKey || bearerToken
+  if (provided !== API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  next()
+}
+
+app.use(authMiddleware)
 
 const pool = mysql.createPool({
   host: DB_HOST,

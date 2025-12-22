@@ -85,6 +85,8 @@ Environment variables:
 - `DB_NAME` (e.g. `mysql` or your own db name)
 - `PORT` (default `3000`)
 - `CORS_ORIGIN` (frontend URL or `*`)
+- `API_KEY` (string; if set, all API rutas salvo `/api/health` requieren `x-api-key` o `Authorization: Bearer {API_KEY}`)
 
 Frontend env:
 - `VITE_API_BASE_URL` (e.g. `https://api.actas-dev.jesuscorta.es`)
+- `VITE_API_KEY` (opcional; si se define, el frontend envía `x-api-key` con este valor en las llamadas a la API)

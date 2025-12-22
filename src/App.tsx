@@ -15,6 +15,7 @@ import './index.css'
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
   : ''
+const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
 
 type Note = {
   id: string
@@ -264,7 +265,10 @@ function App() {
     try {
       await fetch(`${API_BASE}/api/state`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+        },
         body: JSON.stringify({ notes: notesToSave, clients: clientsToSave }),
       })
     } catch (error) {
@@ -335,7 +339,11 @@ function App() {
 
     const loadFromApi = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/state`)
+        const res = await fetch(`${API_BASE}/api/state`, {
+          headers: {
+            ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+          },
+        })
         if (!res.ok) {
           throw new Error(`API failed: ${res.status}`)
         }
