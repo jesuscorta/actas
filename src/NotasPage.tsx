@@ -21,7 +21,6 @@ type QuickNote = {
   content: string
   createdAt: string
   updatedAt: string
-  shareToken?: string
 }
 
 type MeetingNote = Record<string, any>
@@ -32,7 +31,6 @@ type QuickNoteDraft = {
   client: string
   date: string
   content: string
-  shareToken?: string
 }
 const storage = localforage.createInstance({
   name: 'actas',
@@ -85,9 +83,6 @@ function NotasPage() {
     return base.slice(0, 12)
   }, [clients, draft.client])
 
-  const buildShareUrl = (noteId: string, token: string) =>
-    `${window.location.origin}/public/nota/${noteId}?token=${token}`
-
   const loadFromStorage = async () => {
     const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
     const storedClients = (await storage.getItem<string[]>('clients')) || []
@@ -96,9 +91,7 @@ function NotasPage() {
       new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
     ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
 
-    const sorted = sortQuickNotes(
-      storedQuickNotes.map((note) => ({ ...note, shareToken: note.shareToken || '' })),
-    )
+    const sorted = sortQuickNotes(storedQuickNotes)
     setNotes(sorted)
     setClients(combinedClients)
     setActasMirror(storedActas)
@@ -110,7 +103,6 @@ function NotasPage() {
         client: sorted[0].client,
         date: sorted[0].date,
         content: sorted[0].content,
-        shareToken: sorted[0].shareToken || '',
       })
       if (editor) {
         editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
@@ -129,9 +121,7 @@ function NotasPage() {
         throw new Error(`API failed: ${res.status}`)
       }
       const data = (await res.json()) as { notes?: MeetingNote[]; clients?: string[]; quickNotes?: QuickNote[] }
-      const storedQuickNotes = Array.isArray(data.quickNotes)
-        ? data.quickNotes.map((note) => ({ ...note, shareToken: note.shareToken || '' }))
-        : []
+      const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
       const storedClients = Array.isArray(data.clients) ? data.clients : []
       const storedActas = Array.isArray(data.notes) ? data.notes : []
       const combinedClients = Array.from(
@@ -147,13 +137,12 @@ function NotasPage() {
       if (sorted[0]) {
         setSelectedId(sorted[0].id)
         setDraft({
-        id: sorted[0].id,
-        title: sorted[0].title,
-        client: sorted[0].client,
-        date: sorted[0].date,
-        content: sorted[0].content,
-        shareToken: sorted[0].shareToken || '',
-      })
+          id: sorted[0].id,
+          title: sorted[0].title,
+          client: sorted[0].client,
+          date: sorted[0].date,
+          content: sorted[0].content,
+        })
         if (editor) {
           editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
         }
@@ -301,7 +290,6 @@ function NotasPage() {
       client: note.client,
       date: note.date,
       content: note.content,
-      shareToken: note.shareToken || '',
     })
     if (editor) {
       editor.commands.setContent(note.content || '<p></p>', { emitUpdate: false })
@@ -335,7 +323,6 @@ function NotasPage() {
               date: draft.date,
               content: draft.content,
               updatedAt: timestamp,
-              shareToken: draft.shareToken || note.shareToken || '',
             }
           : note,
       )
@@ -349,7 +336,6 @@ function NotasPage() {
         content: draft.content,
         createdAt: timestamp,
         updatedAt: timestamp,
-        shareToken: '',
       }
       nextNotes = [newNote, ...notes]
       setSelectedId(id)
@@ -363,45 +349,6 @@ function NotasPage() {
     setSaving(false)
     setMessage('Nota guardada')
     setTimeout(() => setMessage(null), 1200)
-  }
-
-  const handleShareLink = async () => {
-    if (!selectedId) {
-      await saveDraft()
-    }
-    const currentId = selectedId || draft.id
-    if (!currentId) return
-
-    const token = draft.shareToken || notes.find((n) => n.id === currentId)?.shareToken || nanoid(24)
-    const updated = sortQuickNotes(
-      notes.map((note) => (note.id === currentId ? { ...note, shareToken: token } : note)),
-    )
-    setNotes(updated)
-    setDraft((prev) => ({ ...prev, shareToken: token }))
-    await storage.setItem('quickNotes', updated)
-    await syncState(updated, clients, actasMirror)
-
-    const url = buildShareUrl(currentId, token)
-    try {
-      await navigator.clipboard.writeText(url)
-      setMessage('Link público copiado')
-    } catch {
-      setMessage('Link público listo')
-    }
-    setTimeout(() => setMessage(null), 1500)
-  }
-
-  const handleRevokeShare = async () => {
-    if (!selectedId) return
-    const updated = sortQuickNotes(
-      notes.map((note) => (note.id === selectedId ? { ...note, shareToken: '' } : note)),
-    )
-    setNotes(updated)
-    setDraft((prev) => ({ ...prev, shareToken: '' }))
-    await storage.setItem('quickNotes', updated)
-    await syncState(updated, clients, actasMirror)
-    setMessage('Link público revocado')
-    setTimeout(() => setMessage(null), 1500)
   }
 
   useEffect(() => {
@@ -429,7 +376,6 @@ function NotasPage() {
         client: next.client,
         date: next.date,
         content: next.content,
-        shareToken: next.shareToken || '',
       })
       if (editor) {
         editor.commands.setContent(next.content || '<p></p>', { emitUpdate: false })
@@ -494,24 +440,6 @@ function NotasPage() {
             >
               + Nueva nota
             </button>
-            {selectedId && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleShareLink}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
-                >
-                  Compartir
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRevokeShare}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-red-50 hover:text-red-700"
-                >
-                  Revocar link
-                </button>
-              </>
-            )}
             <button
               type="button"
               onClick={() => setShowClientManager(true)}

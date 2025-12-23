@@ -2,8 +2,6 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react
 import ActasPage from './App'
 import HomePage from './HomePage'
 import NotasPage from './NotasPage'
-import PublicActaPage from './PublicActaPage'
-import PublicNotaPage from './PublicNotaPage'
 
 function Header() {
   const { pathname } = useLocation()
@@ -50,8 +48,6 @@ function RouterApp() {
         <Route path="/" element={<HomePage />} />
         <Route path="/actas" element={<ActasPage />} />
         <Route path="/notas" element={<NotasPage />} />
-        <Route path="/public/acta/:id" element={<PublicActaPage />} />
-        <Route path="/public/nota/:id" element={<PublicNotaPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

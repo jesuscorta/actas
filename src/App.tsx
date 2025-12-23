@@ -30,7 +30,6 @@ type Note = {
   nextTasks: { id: string; text: string; done: boolean }[]
   createdAt: string
   updatedAt: string
-  shareToken?: string
 }
 
 type NoteDraft = {
@@ -43,7 +42,6 @@ type NoteDraft = {
   content: string
   nextSteps: string
   nextTasks: { id: string; text: string; done: boolean }[]
-  shareToken?: string
 }
 
 type QuickNote = {
@@ -54,7 +52,6 @@ type QuickNote = {
   content: string
   createdAt: string
   updatedAt: string
-  shareToken?: string
 }
 
 type Filters = {
@@ -191,7 +188,6 @@ function App() {
                 done: Boolean(t.done),
               }))
             : [],
-        shareToken: note.shareToken || '',
       })),
     )
   }, [])
@@ -234,7 +230,6 @@ function App() {
         content: note.content,
         nextSteps: note.nextSteps || '',
         nextTasks: note.nextTasks || [],
-        shareToken: note.shareToken || '',
       })
       setDirty(false)
     },
@@ -255,7 +250,6 @@ function App() {
         content: first.content,
         nextSteps: first.nextSteps || '',
         nextTasks: first.nextTasks || [],
-        shareToken: first.shareToken || '',
       })
     } else {
       setSelectedId(null)
@@ -268,10 +262,7 @@ function App() {
       const storedNotesRaw = (await storage.getItem<Note[]>('notes')) || []
       const storedNotes = normalizeNotes(storedNotesRaw)
       const storedClients = (await storage.getItem<string[]>('clients')) || []
-      const storedQuickNotes = ((await storage.getItem<QuickNote[]>('quickNotes')) || []).map((n) => ({
-        ...n,
-        shareToken: n.shareToken || '',
-      }))
+      const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
         ...storedClients,
@@ -298,9 +289,7 @@ function App() {
         }
         const data = (await res.json()) as { notes?: Note[]; clients?: string[]; quickNotes?: QuickNote[] }
         const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
-        const storedQuickNotes = Array.isArray(data.quickNotes)
-          ? data.quickNotes.map((n) => ({ ...n, shareToken: n.shareToken || '' }))
-          : []
+        const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
         const storedClients = Array.isArray(data.clients) ? data.clients : []
         const combinedClients = sortClients([
           ...DEFAULT_CLIENTS,
@@ -716,7 +705,6 @@ function App() {
               nextSteps: draft.nextSteps,
               nextTasks: draft.nextTasks,
               updatedAt: timestamp,
-              shareToken: draft.shareToken || note.shareToken || '',
             }
           : note,
       )
@@ -734,7 +722,6 @@ function App() {
         nextTasks: draft.nextTasks,
         createdAt: timestamp,
         updatedAt: timestamp,
-        shareToken: '',
       }
       nextNotes = [newNote, ...notes]
       setDraft((prev) => ({ ...prev, id }))
@@ -824,48 +811,6 @@ function App() {
       setTimeout(() => setMessage(null), 1500)
       console.error(error)
     }
-  }
-
-  const buildShareUrl = (noteId: string, token: string) =>
-    `${window.location.origin}/public/acta/${noteId}?token=${token}`
-
-  const handleShareLink = async () => {
-    if (!selectedId) {
-      await saveDraft()
-    }
-    const currentId = selectedId || draft.id
-    if (!currentId) return
-
-    const token = draft.shareToken || notes.find((n) => n.id === currentId)?.shareToken || nanoid(24)
-    const updated = sortNotes(
-      notes.map((note) => (note.id === currentId ? { ...note, shareToken: token } : note)),
-    )
-    setNotes(updated)
-    setDraft((prev) => ({ ...prev, shareToken: token }))
-    await storage.setItem('notes', updated)
-    await syncState(updated, clients, quickNotesCache)
-
-    const url = buildShareUrl(currentId, token)
-    try {
-      await navigator.clipboard.writeText(url)
-      setMessage('Link público copiado')
-    } catch {
-      setMessage('Link público listo')
-    }
-    setTimeout(() => setMessage(null), 1500)
-  }
-
-  const handleRevokeShare = async () => {
-    if (!selectedId) return
-    const updated = sortNotes(
-      notes.map((note) => (note.id === selectedId ? { ...note, shareToken: '' } : note)),
-    )
-    setNotes(updated)
-    setDraft((prev) => ({ ...prev, shareToken: '' }))
-    await storage.setItem('notes', updated)
-    await syncState(updated, clients, quickNotesCache)
-    setMessage('Link público revocado')
-    setTimeout(() => setMessage(null), 1500)
   }
 
   const handleExport = () => {
@@ -1025,7 +970,6 @@ function App() {
         content: next.content,
         nextSteps: next.nextSteps,
         nextTasks: next.nextTasks,
-        shareToken: next.shareToken || '',
       })
     } else {
       setSelectedId(null)
@@ -1096,24 +1040,6 @@ function App() {
             >
               Exportar CSV
             </button>
-            {selectedId && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleShareLink}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
-                >
-                  Compartir
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRevokeShare}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-red-50 hover:text-red-700"
-                >
-                  Revocar link
-                </button>
-              </>
-            )}
             <button
               type="button"
               onClick={triggerImport}
