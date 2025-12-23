@@ -7,7 +7,7 @@ import PublicNotaPage from './PublicNotaPage'
 
 function Header() {
   const { pathname } = useLocation()
-  if (pathname === '/') return null
+  if (pathname === '/' || pathname.startsWith('/public')) return null
   const isActive = (path: string) => pathname.startsWith(path)
   return (
     <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
