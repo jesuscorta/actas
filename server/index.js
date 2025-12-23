@@ -22,7 +22,13 @@ const authMiddleware = (req, res, next) => {
   if (!API_KEY) return next()
 
   // Allow health check without auth to keep probes simple.
-  if (req.path === '/api/health') return next()
+  if (
+    req.path === '/api/health' ||
+    req.path.startsWith('/api/public/acta/') ||
+    req.path.startsWith('/api/public/nota/')
+  ) {
+    return next()
+  }
 
   const headerKey = req.get('x-api-key')
   const bearer = req.get('authorization')
@@ -67,21 +73,25 @@ const coerceState = (payload) => {
   return { notes, clients, quickNotes }
 }
 
+const loadState = async () => {
+  await ensureSchema()
+  const [rows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
+  if (!rows.length) {
+    return { notes: [], clients: [], quickNotes: [] }
+  }
+  const raw = rows[0].data
+  const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+  return coerceState(data)
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
 app.get('/api/state', async (_req, res) => {
   try {
-    await ensureSchema()
-    const [rows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
-    if (!rows.length) {
-      res.json({ notes: [], clients: [] })
-      return
-    }
-    const raw = rows[0].data
-    const data = typeof raw === 'string' ? JSON.parse(raw) : raw
-    res.json(coerceState(data))
+    const state = await loadState()
+    res.json(state)
   } catch (error) {
     console.error('Failed to load state', error)
     res.status(500).json({ error: 'Failed to load state' })
@@ -100,6 +110,48 @@ app.put('/api/state', async (req, res) => {
   } catch (error) {
     console.error('Failed to save state', error)
     res.status(500).json({ error: 'Failed to save state' })
+  }
+})
+
+app.get('/api/public/acta/:id', async (req, res) => {
+  const { id } = req.params
+  const token = req.query.token
+  if (!token) {
+    res.status(401).json({ error: 'Missing token' })
+    return
+  }
+  try {
+    const state = await loadState()
+    const note = state.notes.find((n) => n.id === id && n.shareToken === token)
+    if (!note) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    res.json({ note })
+  } catch (error) {
+    console.error('Failed to load public acta', error)
+    res.status(500).json({ error: 'Failed to load acta' })
+  }
+})
+
+app.get('/api/public/nota/:id', async (req, res) => {
+  const { id } = req.params
+  const token = req.query.token
+  if (!token) {
+    res.status(401).json({ error: 'Missing token' })
+    return
+  }
+  try {
+    const state = await loadState()
+    const note = state.quickNotes.find((n) => n.id === id && n.shareToken === token)
+    if (!note) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    res.json({ note })
+  } catch (error) {
+    console.error('Failed to load public note', error)
+    res.status(500).json({ error: 'Failed to load note' })
   }
 })
 
