@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import mysql from 'mysql2/promise'
+import { OAuth2Client } from 'google-auth-library'
 
 const {
   DB_HOST = 'db',
@@ -11,15 +12,51 @@ const {
   CORS_ORIGIN = '*',
   PORT = '3000',
   API_KEY = '',
+  GOOGLE_CLIENT_ID = '',
+  GOOGLE_ALLOWED_EMAILS = '',
+  GOOGLE_ALLOWED_DOMAIN = '',
 } = process.env
+
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null
+
+const allowedEmails = GOOGLE_ALLOWED_EMAILS.split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean)
+const allowedDomain = GOOGLE_ALLOWED_DOMAIN.trim().toLowerCase()
+
+const isEmailAllowed = (email) => {
+  if (!email) return false
+  const normalized = email.toLowerCase()
+  if (allowedEmails.length && !allowedEmails.includes(normalized)) return false
+  if (allowedDomain && !normalized.endsWith(`@${allowedDomain}`)) return false
+  return true
+}
+
+const verifyGoogleToken = async (token) => {
+  if (!googleClient) return null
+  const ticket = await googleClient.verifyIdToken({
+    idToken: token,
+    audience: GOOGLE_CLIENT_ID,
+  })
+  const payload = ticket.getPayload()
+  if (!isEmailAllowed(payload?.email || '')) {
+    throw new Error('Email not allowed')
+  }
+  return {
+    email: payload.email,
+    name: payload.name,
+    picture: payload.picture,
+    sub: payload.sub,
+  }
+}
 
 const app = express()
 app.use(cors({ origin: CORS_ORIGIN }))
 app.use(express.json({ limit: '5mb' }))
 
 const authMiddleware = (req, res, next) => {
-  // If no API_KEY is set, keep current behavior (useful for local dev).
-  if (!API_KEY) return next()
+  // If neither API_KEY nor Google auth is configured, keep current behavior (useful for local dev).
+  if (!API_KEY && !GOOGLE_CLIENT_ID) return next()
 
   // Allow health check without auth to keep probes simple.
   if (req.path === '/api/health') return next()
@@ -28,11 +65,28 @@ const authMiddleware = (req, res, next) => {
   const bearer = req.get('authorization')
   const bearerToken = bearer?.startsWith('Bearer ') ? bearer.slice(7).trim() : null
 
-  const provided = headerKey || bearerToken
-  if (provided !== API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  // API key fallback (for compatibility)
+  if (API_KEY && headerKey === API_KEY) return next()
+  if (API_KEY && bearerToken === API_KEY) return next()
+
+  const handleError = () => res.status(401).json({ error: 'Unauthorized' })
+
+  if (!bearerToken) {
+    return handleError()
   }
-  next()
+
+  verifyGoogleToken(bearerToken)
+    .then((user) => {
+      if (user) {
+        req.user = user
+        return next()
+      }
+      return handleError()
+    })
+    .catch((error) => {
+      console.error('Google auth error', error.message || error)
+      return handleError()
+    })
 }
 
 app.use(authMiddleware)

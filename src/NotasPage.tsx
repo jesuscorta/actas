@@ -7,6 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import LinkExtension from '@tiptap/extension-link'
 import { DEFAULT_CLIENTS } from './constants/clients'
+import { useAuth } from './auth'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
@@ -66,6 +67,7 @@ const sortQuickNotes = (list: QuickNote[]) =>
   )
 
 function NotasPage() {
+  const { authHeaders } = useAuth()
   const [notes, setNotes] = useState<QuickNote[]>([])
   const [draft, setDraft] = useState<QuickNoteDraft>(emptyDraft())
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -114,6 +116,7 @@ function NotasPage() {
     try {
       const res = await fetch(`${API_BASE}/api/state`, {
         headers: {
+          ...authHeaders(),
           ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
         },
       })
@@ -160,7 +163,7 @@ function NotasPage() {
       void loadFromStorage()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [authHeaders])
 
   useEffect(() => {
     const loadClients = async () => {
@@ -245,6 +248,7 @@ function NotasPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders(),
           ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
         },
         body: JSON.stringify({

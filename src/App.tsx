@@ -12,6 +12,7 @@ import Mention from '@tiptap/extension-mention'
 import { mergeAttributes } from '@tiptap/core'
 import './index.css'
 import { DEFAULT_CLIENTS } from './constants/clients'
+import { useAuth } from './auth'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
@@ -146,6 +147,7 @@ const NoteMention = Mention.extend({
 })
 
 function App() {
+  const { authHeaders } = useAuth()
   const [notes, setNotes] = useState<Note[]>([])
   const [draft, setDraft] = useState<NoteDraft>(emptyDraft())
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -200,6 +202,7 @@ function App() {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            ...authHeaders(),
             ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
           },
           body: JSON.stringify({
@@ -212,7 +215,7 @@ function App() {
         console.error('Sync error', error)
       }
     },
-    [quickNotesCache],
+    [authHeaders, quickNotesCache],
   )
 
   const jumpToNote = useCallback(
@@ -281,6 +284,7 @@ function App() {
       try {
         const res = await fetch(`${API_BASE}/api/state`, {
           headers: {
+            ...authHeaders(),
             ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
           },
         })
@@ -316,7 +320,7 @@ function App() {
     } else {
       void loadFromStorage()
     }
-  }, [informUpdatedDraft, normalizeNotes])
+  }, [authHeaders, informUpdatedDraft, normalizeNotes])
 
   useEffect(() => {
     notesRef.current = notes

@@ -9,12 +9,12 @@
 ## Sincronización con API
 - **Endpoint**: si existe `VITE_API_BASE_URL`, la app sincroniza estado completo (notas + clientes) con `GET/PUT {VITE_API_BASE_URL}/api/state`. Si no está definido, solo usa IndexedDB.
 - **Backend**: `server/index.js` (Express + MySQL). Tabla `app_state` (id=1) almacena JSON `{notes, clients}`. Rutas: `/api/health`, `/api/state` (GET/PUT).
-- **Seguridad API**: si `API_KEY` está definido, todas las rutas salvo `/api/health` exigen cabecera `x-api-key` o `Authorization: Bearer {API_KEY}`; responde 401 si falta/no coincide.
-- **Frontend**: si `VITE_API_KEY` está definido, las peticiones al backend incluyen `x-api-key` con ese valor.
-- **Env backend**: `DB_HOST`, `DB_PORT` (3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT` (3000), `CORS_ORIGIN`, `API_KEY`.
+- **Seguridad API**: acepta `Authorization: Bearer {id_token_google}` (verificado contra `GOOGLE_CLIENT_ID`, dominio/allowlist opcional). `API_KEY` queda como fallback; si ninguno está configurado, no hay auth (solo para dev local).
+- **Frontend**: `VITE_GOOGLE_CLIENT_ID` habilita login Google y envía el ID token en cada llamada (cabecera `Authorization: Bearer …`). `VITE_API_KEY` opcional añade `x-api-key`.
+- **Env backend**: `DB_HOST`, `DB_PORT` (3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT` (3000), `CORS_ORIGIN`, `API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_ALLOWED_EMAILS`, `GOOGLE_ALLOWED_DOMAIN`.
 
 ## Build y contenedores
-- **Frontend**: `npm run dev/build/preview/lint`. Docker multistage (`Dockerfile`) build con Vite; Nginx sirve `dist`. Requiere `.htpasswd` para el `auth_basic` del `nginx.conf`.
+- **Frontend**: `npm run dev/build/preview/lint`. Docker multistage (`Dockerfile`) build con Vite; Nginx sirve `dist` sin autenticación adicional.
 - **Backend**: `server/Dockerfile` ejecuta `node index.js` en puerto 3000.
 
 ## Estado en Dokploy (VPS)
@@ -28,5 +28,4 @@
 
 ## Qué revisar rápido
 - Si no sincroniza: comprobar `VITE_API_BASE_URL` en build y que `/api/state` responde.
-- Si no hay auth: asegurarse de montar `.htpasswd` en la imagen Nginx.
 - Si falta persistencia en servidor: confirmar MySQL accesible desde backend (variables env correctas y tabla `app_state` creada automáticamente).
