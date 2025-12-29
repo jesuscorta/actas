@@ -39,33 +39,58 @@ function Header() {
           </Link>
         </nav>
         {user && (
-          <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1">
+          <>
+            <div className="ml-auto hidden items-center gap-3 md:flex">
+              <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1">
+                {user.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name}
+                    className="h-8 w-8 rounded-full border border-slate-200 object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex flex-col leading-tight">
+                  <span className="text-sm font-semibold text-slate-900">{user.name}</span>
+                  <span className="text-xs text-slate-500">{user.email}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+              >
+                Salir
+              </button>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2 md:hidden">
               {user.picture ? (
                 <img
                   src={user.picture}
                   alt={user.name}
-                  className="h-8 w-8 rounded-full border border-slate-200 object-cover"
+                  className="h-9 w-9 rounded-full border border-slate-200 object-cover"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
               )}
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-slate-900">{user.name}</span>
-                <span className="text-xs text-slate-500">{user.email}</span>
-              </div>
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+                aria-label="Salir"
+              >
+                Salir
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={signOut}
-              className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
-            >
-              Salir
-            </button>
-          </div>
+          </>
         )}
       </div>
     </header>
