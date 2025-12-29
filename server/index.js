@@ -138,9 +138,14 @@ const resolveUserEmail = (req) => {
 }
 
 const migrateLegacyState = async () => {
-  // If we already have per-user data, skip.
-  const [existing] = await pool.query('SELECT COUNT(*) AS total FROM app_state_users')
-  if (existing?.[0]?.total > 0) return
+  const ownerEmail = (MIGRATION_DEFAULT_OWNER || '').toLowerCase()
+  if (!ownerEmail) return
+
+  const [existingForOwner] = await pool.query(
+    'SELECT email FROM app_state_users WHERE email = ? LIMIT 1',
+    [ownerEmail],
+  )
+  if (existingForOwner.length) return
 
   // Try to read legacy single-state row.
   const [legacyRows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
@@ -149,8 +154,6 @@ const migrateLegacyState = async () => {
   const raw = legacyRows[0].data
   const data = typeof raw === 'string' ? JSON.parse(raw) : raw
   const state = coerceState(data)
-  const ownerEmail = (MIGRATION_DEFAULT_OWNER || '').toLowerCase()
-  if (!ownerEmail) return
 
   await pool.query(
     'INSERT INTO app_state_users (email, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
