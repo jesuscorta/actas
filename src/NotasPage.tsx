@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { nanoid } from 'nanoid'
 import localforage from 'localforage'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -67,7 +67,7 @@ const sortQuickNotes = (list: QuickNote[]) =>
   )
 
 function NotasPage() {
-  const { authHeaders } = useAuth()
+  const { authHeaders, user } = useAuth()
   const [notes, setNotes] = useState<QuickNote[]>([])
   const [draft, setDraft] = useState<QuickNoteDraft>(emptyDraft())
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -79,6 +79,10 @@ function NotasPage() {
   const [showClientManager, setShowClientManager] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [actasMirror, setActasMirror] = useState<MeetingNote[]>([])
+  const storageKey = useCallback(
+    (name: string) => `${name}:${(user?.email || 'local').toLowerCase()}`,
+    [user?.email],
+  )
   const filteredClients = useMemo(() => {
     const q = draft.client.trim().toLowerCase()
     const base = q ? clients.filter((c) => c.toLowerCase().includes(q)) : clients
@@ -86,9 +90,10 @@ function NotasPage() {
   }, [clients, draft.client])
 
   const loadFromStorage = async () => {
-    const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
-    const storedClients = (await storage.getItem<string[]>('clients')) || []
-    const storedActas = (await storage.getItem<MeetingNote[]>('notes')) || []
+    const storedQuickNotes =
+      (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
+    const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
+    const storedActas = (await storage.getItem<MeetingNote[]>(storageKey('notes'))) || []
     const combinedClients = Array.from(
       new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
     ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
@@ -134,9 +139,9 @@ function NotasPage() {
       setNotes(sorted)
       setClients(combinedClients)
       setActasMirror(storedActas)
-      await storage.setItem('quickNotes', sorted)
-      await storage.setItem('clients', combinedClients)
-      await storage.setItem('notes', storedActas)
+      await storage.setItem(storageKey('quickNotes'), sorted)
+      await storage.setItem(storageKey('clients'), combinedClients)
+      await storage.setItem(storageKey('notes'), storedActas)
       if (sorted[0]) {
         setSelectedId(sorted[0].id)
         setDraft({
@@ -163,12 +168,12 @@ function NotasPage() {
       void loadFromStorage()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authHeaders])
+  }, [authHeaders, storageKey])
 
   useEffect(() => {
     const loadClients = async () => {
       try {
-        const storedClients = (await storage.getItem<string[]>('clients')) || []
+        const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
         const combined = [...DEFAULT_CLIENTS, ...storedClients].filter(Boolean)
         const unique = Array.from(new Set(combined)).sort((a, b) =>
           a.localeCompare(b, 'es', { sensitivity: 'base' }),
@@ -179,7 +184,7 @@ function NotasPage() {
       }
     }
     void loadClients()
-  }, [])
+  }, [storageKey])
 
   const editor = useEditor({
     extensions: [
@@ -273,7 +278,7 @@ function NotasPage() {
     setClients((prev) => {
       if (prev.some((c) => c.toLowerCase() === cleaned.toLowerCase())) return prev
       const next = [...prev, cleaned].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
-      void storage.setItem('clients', next)
+      void storage.setItem(storageKey('clients'), next)
       void syncState(notes, next, actasMirror)
       return next
     })
@@ -348,7 +353,7 @@ function NotasPage() {
 
     const sorted = sortQuickNotes(nextNotes)
     setNotes(sorted)
-    await storage.setItem('quickNotes', sorted)
+    await storage.setItem(storageKey('quickNotes'), sorted)
     await syncState(sorted, clients, actasMirror)
     setSaving(false)
     setMessage('Nota guardada')
@@ -369,7 +374,7 @@ function NotasPage() {
     if (!confirmDelete) return
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
-    await storage.setItem('quickNotes', remaining)
+    await storage.setItem(storageKey('quickNotes'), remaining)
     await syncState(remaining, clients, actasMirror)
     if (remaining.length) {
       const next = remaining[0]
@@ -404,7 +409,7 @@ function NotasPage() {
       const sorted = Array.from(new Set(next)).sort((a, b) =>
         a.localeCompare(b, 'es', { sensitivity: 'base' }),
       )
-      void storage.setItem('clients', sorted)
+      void storage.setItem(storageKey('clients'), sorted)
       void syncState(notes, sorted, actasMirror)
       return sorted
     })
@@ -417,8 +422,8 @@ function NotasPage() {
     )
     setClients(nextClients)
     setNotes(updatedNotes)
-    void storage.setItem('clients', nextClients)
-    void storage.setItem('quickNotes', updatedNotes)
+    void storage.setItem(storageKey('clients'), nextClients)
+    void storage.setItem(storageKey('quickNotes'), updatedNotes)
     void syncState(updatedNotes, nextClients, actasMirror)
   }
 

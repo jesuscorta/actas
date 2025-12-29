@@ -15,6 +15,7 @@ const {
   GOOGLE_CLIENT_ID = '',
   GOOGLE_ALLOWED_EMAILS = '',
   GOOGLE_ALLOWED_DOMAIN = '',
+  MIGRATION_DEFAULT_OWNER = 'jesus.cortacero@sidn.es',
 } = process.env
 
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null
@@ -111,6 +112,13 @@ const ensureSchema = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_state_users (
+      email VARCHAR(255) NOT NULL PRIMARY KEY,
+      data JSON NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `)
   schemaReady = true
 }
 
@@ -121,16 +129,51 @@ const coerceState = (payload) => {
   return { notes, clients, quickNotes }
 }
 
+const resolveUserEmail = (req) => {
+  const headerEmail = req.get('x-user-email')
+  const userEmail = (req.user?.email || headerEmail || '').toLowerCase()
+  if (userEmail) return userEmail
+  if (!API_KEY && !GOOGLE_CLIENT_ID) return 'local-dev@example.com'
+  return null
+}
+
+const migrateLegacyState = async () => {
+  // If we already have per-user data, skip.
+  const [existing] = await pool.query('SELECT COUNT(*) AS total FROM app_state_users')
+  if (existing?.[0]?.total > 0) return
+
+  // Try to read legacy single-state row.
+  const [legacyRows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
+  if (!legacyRows.length) return
+
+  const raw = legacyRows[0].data
+  const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+  const state = coerceState(data)
+  const ownerEmail = (MIGRATION_DEFAULT_OWNER || '').toLowerCase()
+  if (!ownerEmail) return
+
+  await pool.query(
+    'INSERT INTO app_state_users (email, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
+    [ownerEmail, JSON.stringify(state)],
+  )
+  console.log(`Migrated legacy state to user ${ownerEmail}`)
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
-app.get('/api/state', async (_req, res) => {
+app.get('/api/state', async (req, res) => {
   try {
     await ensureSchema()
-    const [rows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
+    const userEmail = resolveUserEmail(req)
+    if (!userEmail) return res.status(400).json({ error: 'User email required' })
+
+    await migrateLegacyState()
+
+    const [rows] = await pool.query('SELECT data FROM app_state_users WHERE email = ?', [userEmail])
     if (!rows.length) {
-      res.json({ notes: [], clients: [] })
+      res.json({ notes: [], clients: [], quickNotes: [] })
       return
     }
     const raw = rows[0].data
@@ -145,10 +188,14 @@ app.get('/api/state', async (_req, res) => {
 app.put('/api/state', async (req, res) => {
   try {
     await ensureSchema()
+    const userEmail = resolveUserEmail(req)
+    if (!userEmail) return res.status(400).json({ error: 'User email required' })
+    await migrateLegacyState()
+
     const state = coerceState(req.body)
     await pool.query(
-      'INSERT INTO app_state (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
-      [JSON.stringify(state)],
+      'INSERT INTO app_state_users (email, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
+      [userEmail, JSON.stringify(state)],
     )
     res.json({ ok: true })
   } catch (error) {

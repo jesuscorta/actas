@@ -89,6 +89,7 @@ Environment variables:
 - `GOOGLE_CLIENT_ID` (obligatorio para login con Google)
 - `GOOGLE_ALLOWED_EMAILS` (opcional, coma-separado para restringir emails exactos)
 - `GOOGLE_ALLOWED_DOMAIN` (opcional, restringe al dominio indicado; p.ej. `jesuscorta.es`)
+- `MIGRATION_DEFAULT_OWNER` (opcional; email al que se asigna el estado legacy `app_state` la primera vez, por defecto `jesus.cortacero@sidn.es`)
 
 Frontend env:
 - `VITE_API_BASE_URL` (e.g. `https://api.actas-dev.jesuscorta.es`)

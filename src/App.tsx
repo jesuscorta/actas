@@ -147,7 +147,7 @@ const NoteMention = Mention.extend({
 })
 
 function App() {
-  const { authHeaders } = useAuth()
+  const { authHeaders, user } = useAuth()
   const [notes, setNotes] = useState<Note[]>([])
   const [draft, setDraft] = useState<NoteDraft>(emptyDraft())
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -173,6 +173,10 @@ function App() {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
+  const storageKey = useCallback(
+    (name: string) => `${name}:${(user?.email || 'local').toLowerCase()}`,
+    [user?.email],
+  )
 
   const normalizeNotes = useCallback((rawNotes: Note[]) => {
     return sortNotes(
@@ -262,10 +266,11 @@ function App() {
 
   useEffect(() => {
     const loadFromStorage = async () => {
-      const storedNotesRaw = (await storage.getItem<Note[]>('notes')) || []
+      const storedNotesRaw = (await storage.getItem<Note[]>(storageKey('notes'))) || []
       const storedNotes = normalizeNotes(storedNotesRaw)
-      const storedClients = (await storage.getItem<string[]>('clients')) || []
-      const storedQuickNotes = (await storage.getItem<QuickNote[]>('quickNotes')) || []
+      const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
+      const storedQuickNotes =
+        (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
         ...storedClients,
@@ -304,9 +309,9 @@ function App() {
         setClients(combinedClients)
         setNotes(storedNotes)
         setQuickNotesCache(storedQuickNotes)
-        await storage.setItem('notes', storedNotes)
-        await storage.setItem('quickNotes', storedQuickNotes)
-        await storage.setItem('clients', combinedClients)
+        await storage.setItem(storageKey('notes'), storedNotes)
+        await storage.setItem(storageKey('quickNotes'), storedQuickNotes)
+        await storage.setItem(storageKey('clients'), combinedClients)
         informUpdatedDraft(storedNotes)
         setLoading(false)
       } catch (error) {
@@ -320,7 +325,7 @@ function App() {
     } else {
       void loadFromStorage()
     }
-  }, [authHeaders, informUpdatedDraft, normalizeNotes])
+  }, [authHeaders, informUpdatedDraft, normalizeNotes, storageKey])
 
   useEffect(() => {
     notesRef.current = notes
@@ -734,7 +739,7 @@ function App() {
 
     nextNotes = sortNotes(nextNotes)
     setNotes(nextNotes)
-    await storage.setItem('notes', nextNotes)
+    await storage.setItem(storageKey('notes'), nextNotes)
     await syncState(nextNotes, clients, quickNotesCache)
     setDirty(false)
     setSaving(false)
@@ -893,8 +898,8 @@ function App() {
 
         setNotes(mergedNotes)
         setClients(updatedClients)
-        await storage.setItem('notes', mergedNotes)
-        await storage.setItem('clients', updatedClients)
+        await storage.setItem(storageKey('notes'), mergedNotes)
+        await storage.setItem(storageKey('clients'), updatedClients)
         await syncState(mergedNotes, updatedClients, quickNotesCache)
         setMessage('Importación lista')
         setTimeout(() => setMessage(null), 1500)
@@ -958,7 +963,7 @@ function App() {
 
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
-    await storage.setItem('notes', remaining)
+    await storage.setItem(storageKey('notes'), remaining)
     await syncState(remaining, clients, quickNotesCache)
 
     if (remaining.length > 0) {
@@ -991,7 +996,7 @@ function App() {
       const next = [...prev]
       next[index] = cleaned
       const sorted = sortClients(next)
-      void storage.setItem('clients', sorted)
+      void storage.setItem(storageKey('clients'), sorted)
       void syncState(notesRef.current, sorted, quickNotesCache)
       return sorted
     })
@@ -1004,7 +1009,7 @@ function App() {
     )
     setClients(nextClients)
     setNotes(updatedNotes)
-    void storage.setItem('clients', nextClients)
+    void storage.setItem(storageKey('clients'), nextClients)
     void syncState(updatedNotes, nextClients, quickNotesCache)
   }
 
