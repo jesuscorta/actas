@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "exportedAt": "2025-12-19T09:33:19.755Z",
+  "notes": [
+    {
+      "id": "JlVAZZlG8BZD42z6ba1i0",
+      "title": " Revisión planteamiento alto nivel VXGear (interna)",
+      "client": "VXGear",
+      "date": "2025-12-18",
+      "meetingType": "interna",
+      "preNotes": "<p><strong>Fase 1</strong></p><ul><li><p>Desarrollo web de una <strong>comunidad</strong> donde cada usuario (motorista) pueda crear su perfil motero, subiendo los productos que tiene (casco, chaqueta, botas, guantes, ...)</p></li><li><p>¿Qué se va a poder hacer en la comunidad? Compartir: rutas, valoraciones de productos, si perfil para que opinen.</p><ul><li><p>Debe tener: gancho para que los usuario vean la utilidad de entrar en ella</p></li><li><p>Blog con algún contenido para posicionar la comunidad</p></li></ul></li><li><p>El desarrollo debe tener un stack con pensamiento de app nativa a medio-largo plazo</p></li></ul><p>Fase 2</p><ul><li><p>Cuando la comunidad crezca, añadimos productos/afiliación </p></li></ul><p></p>",
+      "content": "",
+      "nextSteps": "",
+      "nextTasks": [],
+      "createdAt": "2025-12-18T14:07:35.934Z",
+      "updatedAt": "2025-12-18T14:20:48.113Z"
+    },
+    {
+      "id": "x9y8mtQJd_M9QVcQGM92b",
+      "title": "Fundació Turisme Mallorca/ Propuesta diseño home",
+      "client": "Consell de Mallorca",
+      "date": "2025-12-17",
+      "meetingType": "cliente",
+      "preNotes": "<p><a target=\"_blank\" rel=\"noopener nofollow noreferrer\" class=\"text-primary-600 underline underline-offset-2\" href=\"https://www.figma.com/proto/yOZ7TbX1asZ6tT8qx05378/%7BUX-UI%7D-Fundaci%C3%B3n-de-turismo-responsable-Mallorca?page-id=10%3A268&amp;node-id=10251-2538&amp;p=f&amp;viewport=-5275%2C-3075%2C1.28&amp;t=DD5X1sakS3g5feod-1&amp;scaling=scale-down&amp;content-scaling=fixed&amp;starting-point-node-id=10251%3A2538\">Desktop</a><br><a target=\"_blank\" rel=\"noopener nofollow noreferrer\" class=\"text-primary-600 underline underline-offset-2\" href=\"https://www.figma.com/proto/yOZ7TbX1asZ6tT8qx05378/%7BUX-UI%7D-Fundaci%C3%B3n-de-turismo-responsable-Mallorca?page-id=10276%3A13608&amp;node-id=10276-13609&amp;p=f&amp;viewport=366%2C540%2C0.05&amp;t=mbSnY9uHAEc38p3X-1&amp;scaling=scale-down&amp;content-scaling=fixed&amp;starting-point-node-id=10276%3A13609\">Mobile</a></p>",
+      "content": "<ul><li><p>Me pondrán en contacto con la persona que está haciendo el scraping del contenido de <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" class=\"text-primary-600 underline underline-offset-2\" href=\"http://mallorca.es\">mallorca.es</a> para definir archivo exportado y qué debe incluir.</p></li><li><p>Como <strong>deberes de cliente</strong>: Preparar el contenido de la sección de 5 cajas. Tienen que ver qué añadir en esa sección.</p></li><li><p>Añadir observatorio con más peso.</p></li><li><p>Añadir al figma un chatbot a modo testing</p></li></ul><hr><p>De cara a fitur, el figma debe tener:</p><ul><li><p>Arquitectura</p></li><li><p>Reorganización de contenido (figma)</p></li><li><p>IA - Chatbot</p></li><li><p>Accesibilidad</p></li></ul><hr><p>Diseño añadirá un flujo conversacional del chatbot</p>",
+      "nextSteps": "<p></p>",
+      "nextTasks": [],
+      "createdAt": "2025-12-17T15:37:45.266Z",
+      "updatedAt": "2025-12-18T07:46:59.240Z"
+    },
+    {
+      "id": "8dMlNmnj_hDcL9_DwIpo9",
+      "title": "Estabanell | Revisión Plataforma Precontratación",
+      "client": "Estabanell",
+      "date": "2025-12-17",
+      "meetingType": "cliente",
+      "preNotes": "<ul><li><p>Entregas diarias si tenemos desarrollos completos</p></li><li><p>Fecha máximo día 26</p></li><li><p>Si hay cambios que requieran añadir algo nuevo, se pospone</p></li><li><p>Valorar pasar la fase 2 después de la calculadora</p></li><li><p>Conocer el estado de las API y de Salesforce</p></li></ul><p><a data-id=\"iof45QApZPRxiZl6pcyCk\" data-label=\"Estabanell | Status interno\" data-mention-suggestion-char=\"@\" data-note-id=\"iof45QApZPRxiZl6pcyCk\" data-note-label=\"Estabanell | Status interno\" href=\"#iof45QApZPRxiZl6pcyCk\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewbox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"h-3.5 w-3.5\" aria-hidden=\"true\"><path d=\"M15 7h3a4 4 0 0 1 0 8h-3\"></path><path d=\"M9 17H6a4 4 0 0 1 0-8h3\"></path><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"></line></svg><span class=\"text-sm font-semibold\">@Estabanell | Status interno</span></a> </p>",
+      "content": "<ul><li><p><strong>Jueves</strong> entregamos plan energía (duda versión mobile)</p></li><li><p>A medida que vayamos terminando planes, se le entregan</p></li><li><p>Entregamos el viernes 26. <strong>Ok de cliente</strong>.</p></li><li><p>No se hará la API de los CUPs (no estaba contemplado en la fase 1</p></li><li><p>Nos pasan html del email maquetado para la notificación a cliente. La notificación a admin será.</p></li><li><p>El 26 harán revisión a fondo para el 29-30 esté usándose.</p></li><li><p>Hoy nos pasan los textos. El plan de energía lo pueden hacer ellos y el resto lo desarrollamos con textos finales</p></li><li><p><strong>FASE 2</strong></p><ul><li><p>Saben que son más de 2 semanas y no hay problema</p></li><li><p>La fase 2 del primer proyecto, se inicia al terminar la fase 1</p></li><li><p>Salesforce no se hará. Si con una plataforma propia que nos pasarán documentación y API. Será el intermediario antes de viajar a Salesforce. La fecha de cuando lo tendrán será a primeros de enero.</p></li><li><p>Esperamos a Manolo para la fase 2.</p></li></ul></li><li><p>API CUPs para la fase 2 de proyecto contratación y fase 1 del proyecto calculadora.</p></li><li><p>Cookies y GTM debemos tenerlo en cuenta en los roadmaps</p></li><li><p>Tenemos ok al diseño</p></li></ul><p></p>",
+      "nextSteps": "<p>Tener en cuenta Cookies y GTM para próximos roadmap.</p>",
+      "nextTasks": [
+        {
+          "id": "KJC-ABw4TilVY1ZmENDnm",
+          "text": "Actualizar roadmap con cookies y GTM",
+          "done": true
+        }
+      ],
+      "createdAt": "2025-12-17T13:23:56.128Z",
+      "updatedAt": "2025-12-17T15:42:34.227Z"
+    },
+    {
+      "id": "mQTGZQa2_QZsHzED0aGSY",
+      "title": "STATUS SIDN X DEOLEO",
+      "client": "Deoleo",
+      "date": "2025-12-17",
+      "meetingType": "cliente",
+      "preNotes": "<p>Tareas activas:</p><ul><li><p>Nuevo trazabilidad</p></li><li><p>Eliminar carapelli.com</p></li></ul><p></p>",
+      "content": "<ul><li><p>Trazabilidad ok</p></li><li><p><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" class=\"text-primary-600 underline underline-offset-2\" href=\"http://Carapelli.com\">Carapelli.com</a> -&gt; No se elimina, haremos una \"home única\" que mostrará el mapa munid de las localizaciones (actualmente un popup). Se le añade logo y eliminamos CTA.</p></li><li><p>Se hará lo mismo con bertolli</p></li></ul><p>Quedamos a la espera de que nos creen la tarea.</p><p></p>",
+      "nextSteps": "<p></p>",
+      "nextTasks": [
+        {
+          "id": "R98ro4xR9PN_iwFs99OKx",
+          "text": "Hablar con Fran para comentar la tarea",
+          "done": false
+        }
+      ],
+      "createdAt": "2025-12-17T11:58:01.866Z",
+      "updatedAt": "2025-12-17T12:00:03.888Z"
+    },
+    {
+      "id": "dqomXElYu0uJLnWBOmJYI",
+      "title": "Revisión herramienta de tiempos",
+      "client": "SIDN",
+      "date": "2025-12-17",
+      "meetingType": "interna",
+      "preNotes": "<p>Os comentamos nuestro plan. Hemos dividido todo lo comentado en 2 fases:<br><br><strong><u>Fase 1 / MVP</u></strong><br></p><ul><li><p><strong>Categorización</strong> de herramientas</p></li><li><p><strong>Historial</strong> de uso</p></li><li><p><strong>Agrupación</strong> de cuentas por herramienta</p></li><li><p><strong>Login</strong> con cuentas de Google de SIDN</p></li><li><p><strong>Roles</strong> de usuarios: superadmin, admin y usuario final</p></li></ul><p><br><strong><u>Fase 2</u></strong><br></p><ul><li><p><strong>Reporting</strong></p></li><li><p><strong>Notificaciones</strong> (a definir por qué vía)</p></li><li><p>Widget de <strong>contador activo</strong></p></li><li><p><strong>Destacados</strong> según uso (recientes o más usadas)</p></li></ul><p>Con la idea de poder desarrollar la <strong>fase 1 en un plazo de 4-5 semanas</strong>, aunque la idea es tirar nosotros directamente con el desarrollo y tomando de referencia el prototipo compartido, y ya a posteriori coordinar con diseño posibles ajustes de mejora UX, y de paso que diseñen la fase 2 que es donde más intervendrían.</p><p></p>",
+      "content": "<ul><li><p><strong>Categorización&nbsp;de herramientas - Pendiente</strong></p></li><li><p><strong>Login&nbsp;con cuentas de Google de SIDN - Pendiente</strong></p></li></ul><p>Fecha tope: fin de año</p><p></p>",
+      "nextSteps": "<p>Reunión con Cristian para enseñarlo</p>",
+      "nextTasks": [],
+      "createdAt": "2025-12-17T11:20:28.673Z",
+      "updatedAt": "2025-12-17T11:57:53.897Z"
+    },
+    {
+      "id": "iof45QApZPRxiZl6pcyCk",
+      "title": "Estabanell | Status interno",
+      "client": "Estabanell",
+      "date": "2025-12-17",
+      "meetingType": "interna",
+      "preNotes": "",
+      "content": "<p>Acordamos entrega el jueves 18 el plan de energía.</p><p>Plantear a cliente fecha máximo de proyecto (MVP), viernes 26 pero que cada proceso completo que tengamos lo iremos subiendo para que lo revisen.</p><p>Las notificaciones que se harán se limita a las básicas de Gravity form.</p><p>Intentamos que durante las vacaciones de Manolo solo se atiendan \"urgencias\" de flujo pero nuevas implementaciones se harán a su vuelta.</p><p>Cada cambio o funcionalidad nueva, podrá ver afectado el proyecto 2.</p><p>Plantearemos en la reunión con cliente que la fase se debería hacer cuando se termine el proyecto de calculadora.</p>",
+      "nextSteps": "<p>Tendremos reunión hoy a las 3.45 Anda y yo para comentar estos puntos y confirmarlos.</p><p>Ver notas previas de la reu con cliente.</p><p></p>",
+      "nextTasks": [],
+      "createdAt": "2025-12-17T10:01:38.713Z",
+      "updatedAt": "2025-12-17T13:23:19.091Z"
+    },
+    {
+      "id": "b3J2IYmuEhfn3-7LpEj9f",
+      "title": "Accesibilidad azkoyen",
+      "client": "Grupo Azkoyen",
+      "date": "2025-12-17",
+      "meetingType": "interna",
+      "preNotes": "",
+      "content": "<p>Cliente pregunta por cómo llevamos el tema de accesibilidad.</p><p>Como no se en qué punto se quedó con Raúl, vamos a escribirles para validar presupuesto y fechar acciones.</p>",
+      "nextSteps": "",
+      "nextTasks": [
+        {
+          "id": "qr1xz8txv3uCPaNpTtiPX",
+          "text": "Escribir correo validando presu",
+          "done": true
+        },
+        {
+          "id": "V4Wxx7CLs5RRrhF7Ri01Z",
+          "text": "Fechar acciones accesibilidad",
+          "done": false
+        }
+      ],
+      "createdAt": "2025-12-17T08:35:31.044Z",
+      "updatedAt": "2025-12-17T09:02:07.009Z"
+    },
+    {
+      "id": "cbOYmpvly8AMsyBX3fcmD",
+      "title": "Kick-Off Centers Auto / SIDN",
+      "client": "Center Auto",
+      "date": "2025-12-16",
+      "meetingType": "cliente",
+      "preNotes": "<p>1. Diseñamos formularios pero, en desarrollo, ¿hasta donde llegamos? Tenemos que desarrollarlos sin funcionalidad y su equipo los termina o cómo. En ese caso, Nosotros los hacemos con Gravity, es viable o necesitan de algún formato especial?</p><p>2. Necesitamos el flujo de citas previas. Hay cierto productos/categorías que, una vez en el carrito, aparecen servicios opcionales y elección de citas.</p><p>3. Buscador de neumáticos, hasta dónde desarrolla SIDN?</p><p>4. Cómo serán esas promociones a nivel desarrollo</p><p>5. Además de las citas que aparecen en el checkout, hay algún otro formulario de citas en pro?</p><p>6. ¿Gastos de envío y/o conexión con transportista?</p><p>7. Promociones en formado A4</p><p></p>",
+      "content": "<p>Necesitaremos conocer el flujo/lógica de productos/categorías que llevarán asociados servicios adicionales y que permitirán elegir cita en taller.</p><p></p><p>El resto de dudas no requieren nada por parte de cliente, si queremos hacerle énfasis en lo hablado a modo confirmación:</p><p>De nuestro lado, desarrollaremos los formularios con Gravity form tal cual lo plasmen en diseño.</p><p>El formulario de buscador de neumáticos por matrícula, se desarrolla y cliente realiza la integración con la API</p><p>El transportista será GLS aunque en el ecommerce solo habrá que establecer tarifas concretas por bultos o por peso. A largo plazo, se plantea la opción de instalar plugin GLS para hacer seguimiento de envíos.</p><p>Las promociones aparecerán en la web en un banner en la home, en una barra superior y, cuando exista, en un visor de pdf o similar en la web.</p>",
+      "nextSteps": "",
+      "nextTasks": [
+        {
+          "id": "-M5IDF5jhshZsbUX9GHF1",
+          "text": "Preparar roadmap",
+          "done": false
+        }
+      ],
+      "createdAt": "2025-12-16T14:52:22.420Z",
+      "updatedAt": "2025-12-18T09:26:57.689Z"
+    },
+    {
+      "id": "Lc6Z3v9Sip7FemqdGmItF",
+      "title": "Jesús / Alberto",
+      "client": "SIDN",
+      "date": "2025-12-16",
+      "content": "<p>Han creado desde CRM un proyecto con Gemini Canvas para facilitar los servicios que ofrece su departamente de cara a propuestas de new business.</p><p>Necesitan que le subamos el proyecto a un entorno en nuestro servidor para poder compartirlo con el resto de la empresa.</p><p>Enlace del proyecto: <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" class=\"text-primary-600 underline underline-offset-2\" href=\"https://aistudio.google.com/apps/drive/187NIPvo2ZCkgYekRC6dweicDPD95FtdP?fullscreenApplet=true&amp;showPreview=true&amp;showAssistant=true\">https://aistudio.google.com/apps/drive/187NIPvo2ZCkgYekRC6dweicDPD95FtdP?fullscreenApplet=true&amp;showPreview=true&amp;showAssistant=true</a></p>",
+      "createdAt": "2025-12-16T11:29:33.220Z",
+      "updatedAt": "2025-12-16T13:11:00.863Z",
+      "meetingType": "interna",
+      "preNotes": "",
+      "nextSteps": "<p>Como habrá modificaciones en el proyecto, comentar con Alberto y Juan para explicarles cómo funciona la subida de actualizaciones.</p>",
+      "nextTasks": [
+        {
+          "id": "sh_vctDVyEtgXL89TPici",
+          "text": "Crear entorno de pre en okitup",
+          "done": false
+        },
+        {
+          "id": "dYwYWe71UP6VPNeIekoEI",
+          "text": "Migrar desarrollo",
+          "done": false
+        }
+      ]
+    }
+  ],
+  "clients": [
+    "3 Claveles",
+    "Aedas",
+    "Affidea",
+    "Altessia",
+    "Andamur",
+    "Aresbank",
+    "Asisa",
+    "BCO Congresos",
+    "BeeDigital",
+    "Billin",
+    "Cadpet",
+    "ce",
+    "Cent",
+    "center",
+    "Center Auto",
+    "Clece",
+    "Colegios RC",
+    "Comparar y ahorrar",
+    "Consell de Mallorca",
+    "CTT Express",
+    "De Hualdo",
+    "Dékuple",
+    "Deoleo",
+    "Diglo",
+    "Divina Seguros",
+    "Ecoembes",
+    "Entradas Master",
+    "Estabanell",
+    "Faes Farma",
+    "Fluidra",
+    "Fotocasa / Datavenues",
+    "Grupo Alhambra IT",
+    "Grupo Apolo (Mariscos Apolo y Cocelang)",
+    "Grupo Azkoyen",
+    "Grupo Emeis",
+    "Grupo Eulen",
+    "Grupo Vértice",
+    "Halehou/Hipotecas Digitales",
+    "Hawha Energy (Imagina Energía y Quantica Renovables)",
+    "Hidráulicas Jaén",
+    "iAhorro",
+    "IBP Tenis",
+    "ICDE",
+    "IML",
+    "isEazy",
+    "Japemasa",
+    "Kaname",
+    "Legend eBikes",
+    "Limepay",
+    "Manuel Yebra",
+    "Mercurius Health",
+    "Nautichandler",
+    "Nearby Computing",
+    "Noelia Romero",
+    "Ohai Resorts",
+    "Ortodoncis",
+    "Papelmatic",
+    "Pastor y Galvez",
+    "Patineteros",
+    "PRIM",
+    "Realia",
+    "Repsol",
+    "Sanferbike",
+    "SIDN",
+    "Simetría Group",
+    "slot.com",
+    "Smoking",
+    "Sportium",
+    "Sublima",
+    "Tega",
+    "The Valley",
+    "Thielmann",
+    "UGR",
+    "Unilabs",
+    "UNIR - Contraste",
+    "Vector Solar",
+    "Vestige Colection",
+    "VXGear",
+    "WTW (Willis Tower Watson)"
+  ]
+}
