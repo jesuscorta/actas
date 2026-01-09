@@ -166,6 +166,28 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/admin/export', async (req, res) => {
+  try {
+    await ensureSchema()
+    await migrateLegacyState()
+
+    const [legacyRows] = await pool.query('SELECT data FROM app_state WHERE id = 1')
+    const legacyRaw = legacyRows.length ? legacyRows[0].data : null
+    const legacy = legacyRaw ? coerceState(typeof legacyRaw === 'string' ? JSON.parse(legacyRaw) : legacyRaw) : null
+
+    const [userRows] = await pool.query('SELECT email, data FROM app_state_users')
+    const perUser = userRows.map((row) => ({
+      email: row.email,
+      data: coerceState(typeof row.data === 'string' ? JSON.parse(row.data) : row.data),
+    }))
+
+    res.json({ legacy, perUser })
+  } catch (error) {
+    console.error('Admin export error', error)
+    res.status(500).json({ error: 'Failed to export data' })
+  }
+})
+
 app.get('/api/state', async (req, res) => {
   try {
     await ensureSchema()

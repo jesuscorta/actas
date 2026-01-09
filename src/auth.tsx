@@ -53,7 +53,9 @@ const decodeJwt = (token: string): UserProfile | null => {
     const [, payload] = token.split('.')
     if (!payload) return null
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = atob(normalized)
+    const pad = normalized.length % 4 ? normalized + '='.repeat(4 - (normalized.length % 4)) : normalized
+    const bytes = Uint8Array.from(atob(pad), (c) => c.charCodeAt(0))
+    const decoded = new TextDecoder().decode(bytes)
     const json = JSON.parse(decoded) as Record<string, any>
     return {
       email: json.email,

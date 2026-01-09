@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { nanoid } from 'nanoid'
 import localforage from 'localforage'
+import Papa from 'papaparse'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -71,7 +72,7 @@ function NotasPage() {
   const [notes, setNotes] = useState<QuickNote[]>([])
   const [draft, setDraft] = useState<QuickNoteDraft>(emptyDraft())
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [filters, setFilters] = useState({ search: '' })
+  const [filters, setFilters] = useState({ search: '', client: 'all' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [clients, setClients] = useState<string[]>(DEFAULT_CLIENTS)
@@ -79,6 +80,7 @@ function NotasPage() {
   const [showClientManager, setShowClientManager] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [actasMirror, setActasMirror] = useState<MeetingNote[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const storageKey = useCallback(
     (name: string) => `${name}:${(user?.email || 'local').toLowerCase()}`,
     [user?.email],
@@ -89,7 +91,7 @@ function NotasPage() {
     return base.slice(0, 12)
   }, [clients, draft.client])
 
-  const loadFromStorage = async () => {
+  const loadFromStorage = useCallback(async () => {
     const storedQuickNotes =
       (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
     const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
@@ -111,13 +113,10 @@ function NotasPage() {
         date: sorted[0].date,
         content: sorted[0].content,
       })
-      if (editor) {
-        editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
-      }
     }
-  }
+  }, [storageKey])
 
-  const loadFromApi = async () => {
+  const loadFromApi = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/state`, {
         headers: {
@@ -128,7 +127,11 @@ function NotasPage() {
       if (!res.ok) {
         throw new Error(`API failed: ${res.status}`)
       }
-      const data = (await res.json()) as { notes?: MeetingNote[]; clients?: string[]; quickNotes?: QuickNote[] }
+      const data = (await res.json()) as {
+        notes?: MeetingNote[]
+        clients?: string[]
+        quickNotes?: QuickNote[]
+      }
       const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
       const storedClients = Array.isArray(data.clients) ? data.clients : []
       const storedActas = Array.isArray(data.notes) ? data.notes : []
@@ -151,15 +154,12 @@ function NotasPage() {
           date: sorted[0].date,
           content: sorted[0].content,
         })
-        if (editor) {
-          editor.commands.setContent(sorted[0].content || '<p></p>', { emitUpdate: false })
-        }
       }
     } catch (error) {
       console.error('API load error', error)
       await loadFromStorage()
     }
-  }
+  }, [authHeaders, loadFromStorage, storageKey])
 
   useEffect(() => {
     if (API_BASE) {
@@ -167,8 +167,19 @@ function NotasPage() {
     } else {
       void loadFromStorage()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authHeaders, storageKey])
+  }, [loadFromApi, loadFromStorage])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (API_BASE) {
+        void loadFromApi()
+      } else {
+        void loadFromStorage()
+      }
+    }
+    window.addEventListener('actas:data-imported', handleRefresh)
+    return () => window.removeEventListener('actas:data-imported', handleRefresh)
+  }, [loadFromApi, loadFromStorage])
 
   useEffect(() => {
     const loadClients = async () => {
@@ -228,6 +239,7 @@ function NotasPage() {
   const filteredNotes = useMemo(() => {
     const term = filters.search.toLowerCase()
     return notes.filter((note) => {
+      if (filters.client !== 'all' && note.client !== filters.client) return false
       if (!term) return true
       return (
         note.title.toLowerCase().includes(term) ||
@@ -236,6 +248,11 @@ function NotasPage() {
       )
     })
   }, [notes, filters])
+
+  const clientsWithNotes = useMemo(() => {
+    const unique = new Set(notes.map((note) => note.client).filter(Boolean))
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  }, [notes])
 
   const selectedNote = useMemo(
     () => notes.find((n) => n.id === selectedId) || null,
@@ -433,6 +450,70 @@ function NotasPage() {
     setNewClientName('')
   }
 
+  const handleExport = () => {
+    const csv = Papa.unparse(
+      notes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        client: note.client,
+        date: note.date,
+        content_html: note.content,
+        created_at: note.createdAt,
+        updated_at: note.updatedAt,
+      })),
+    )
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `notas-${today()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    setMessage('CSV exportado')
+    setTimeout(() => setMessage(null), 1200)
+  }
+
+  const handleImport = (file: File) => {
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const importedRows = results.data.filter((row) => row.title || row.content_html)
+        if (!importedRows.length) return
+
+        const imported: QuickNote[] = importedRows.map((row) => ({
+          id: row.id || nanoid(),
+          title: row.title || 'Sin título',
+          client: row.client || 'Sin cliente',
+          date: row.date || today(),
+          content: row.content_html || '',
+          createdAt: row.created_at || new Date().toISOString(),
+          updatedAt: row.updated_at || new Date().toISOString(),
+        }))
+
+        const mergedNotes = sortQuickNotes([
+          ...notes.filter((note) => !imported.some((i) => i.id === note.id)),
+          ...imported,
+        ])
+        const updatedClients = Array.from(
+          new Set([...clients, ...imported.map((note) => note.client)].filter(Boolean)),
+        ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+
+        setNotes(mergedNotes)
+        setClients(updatedClients)
+        await storage.setItem(storageKey('quickNotes'), mergedNotes)
+        await storage.setItem(storageKey('clients'), updatedClients)
+        await syncState(mergedNotes, updatedClients, actasMirror)
+        setMessage('Importación lista')
+        setTimeout(() => setMessage(null), 1500)
+      },
+    })
+  }
+
+  const triggerImport = () => {
+    fileInputRef.current?.click()
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-3 py-6 text-slate-900 sm:px-5">
       <div className="mx-auto flex max-w-7xl flex-col gap-4">
@@ -448,6 +529,20 @@ function NotasPage() {
               className="rounded-full bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
               + Nueva nota
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+            >
+              Exportar CSV
+            </button>
+            <button
+              type="button"
+              onClick={triggerImport}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+            >
+              Importar CSV
             </button>
             <button
               type="button"
@@ -470,6 +565,19 @@ function NotasPage() {
               <span className="sr-only">Gestionar clientes</span>
             </button>
             {message && <span className="text-xs font-semibold text-emerald-700">{message}</span>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) {
+                  handleImport(file)
+                  event.target.value = ''
+                }
+              }}
+            />
           </div>
         </header>
 
@@ -479,46 +587,62 @@ function NotasPage() {
               <input
                 type="search"
                 value={filters.search}
-                onChange={(e) => setFilters({ search: e.target.value })}
+                onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                 placeholder="Buscar por título, cliente o texto…"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
               />
+              <select
+                value={filters.client}
+                onChange={(e) => setFilters((prev) => ({ ...prev, client: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="all">Todos los clientes</option>
+                {clientsWithNotes.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase text-slate-500">Últimas notas</p>
-                <span className="text-[11px] font-medium text-slate-400">5 más recientes</span>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {filteredNotes.length} en total
+                </span>
               </div>
               {!filteredNotes.length && (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
                   No hay notas aún. Crea la primera.
                 </p>
               )}
-              {filteredNotes.slice(0, 5).map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => handleSelectNote(note)}
-                  className={`w-full rounded-xl border px-3 py-2.5 text-left shadow-sm transition ${
-                    note.id === selectedId
-                      ? 'border-emerald-200 bg-emerald-50'
-                      : 'border-slate-200 bg-white hover:border-emerald-100 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                      {note.client || 'Sin cliente'}
-                    </span>
-                    <span className="text-xs text-slate-400">{formatDate(note.date)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pb-1">
-                    <h3 className="line-clamp-1 text-sm font-semibold text-slate-900">
-                      {note.title || 'Sin título'}
-                    </h3>
-                  </div>
-                  <p className="line-clamp-2 text-xs text-slate-500">{stripHtml(note.content)}</p>
-                </button>
-              ))}
+              <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+                {filteredNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => handleSelectNote(note)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left shadow-sm transition ${
+                      note.id === selectedId
+                        ? 'border-emerald-200 bg-emerald-50'
+                        : 'border-slate-200 bg-white hover:border-emerald-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        {note.client || 'Sin cliente'}
+                      </span>
+                      <span className="text-xs text-slate-400">{formatDate(note.date)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pb-1">
+                      <h3 className="line-clamp-1 text-sm font-semibold text-slate-900">
+                        {note.title || 'Sin título'}
+                      </h3>
+                    </div>
+                    <p className="line-clamp-2 text-xs text-slate-500">{stripHtml(note.content)}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </aside>
 
