@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import localforage from 'localforage'
 import { nanoid } from 'nanoid'
 import Papa from 'papaparse'
-import TurndownService from 'turndown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
@@ -66,7 +65,6 @@ const storage = localforage.createInstance({
   storeName: 'actas_store',
 })
 
-const turndown = new TurndownService()
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -158,9 +156,9 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState<{ pre: boolean; acta: boolean }>({
-    pre: false,
-    acta: false,
+  const [collapsed, setCollapsed] = useState<{ pre: boolean; next: boolean }>({
+    pre: true,
+    next: true,
   })
   const [newTaskText, setNewTaskText] = useState('')
   const [showNewClient, setShowNewClient] = useState(false)
@@ -179,22 +177,31 @@ function App() {
   )
 
   const normalizeNotes = useCallback((rawNotes: Note[]) => {
+    const seen = new Set<string>()
     return sortNotes(
-      rawNotes.map((note) => ({
-        ...note,
-        meetingType: note.meetingType || 'cliente',
-        preNotes: note.preNotes || '',
-        nextSteps: note.nextSteps || '',
-        nextTasks: Array.isArray(note.nextTasks)
-          ? note.nextTasks
-          : Array.isArray((note as any).nextTasks)
-            ? ((note as any).nextTasks as any[]).map((t) => ({
-                id: t.id || nanoid(),
-                text: t.text || '',
-                done: Boolean(t.done),
-              }))
-            : [],
-      })),
+      rawNotes.map((note) => {
+        let id = note.id || nanoid()
+        if (seen.has(id)) {
+          id = nanoid()
+        }
+        seen.add(id)
+        return {
+          ...note,
+          id,
+          meetingType: note.meetingType || 'cliente',
+          preNotes: note.preNotes || '',
+          nextSteps: note.nextSteps || '',
+          nextTasks: Array.isArray(note.nextTasks)
+            ? note.nextTasks
+            : Array.isArray((note as any).nextTasks)
+              ? ((note as any).nextTasks as any[]).map((t) => ({
+                  id: t.id || nanoid(),
+                  text: t.text || '',
+                  done: Boolean(t.done),
+                }))
+              : [],
+        }
+      }),
     )
   }, [])
 
@@ -222,6 +229,16 @@ function App() {
     [authHeaders, quickNotesCache],
   )
 
+  const hasPreContent = useCallback((note: Pick<NoteDraft, 'preNotes'>) => {
+    return Boolean(stripHtml(note.preNotes || '').trim())
+  }, [])
+
+  const hasNextContent = useCallback((note: Pick<NoteDraft, 'nextSteps' | 'nextTasks'>) => {
+    const hasNotes = Boolean(stripHtml(note.nextSteps || '').trim())
+    const hasTasks = (note.nextTasks || []).some((task) => task.text?.trim())
+    return hasNotes || hasTasks
+  }, [])
+
   const jumpToNote = useCallback(
     (noteId: string) => {
       const note = notesRef.current.find((n) => n.id === noteId)
@@ -239,8 +256,13 @@ function App() {
         nextTasks: note.nextTasks || [],
       })
       setDirty(false)
+      setCollapsed((prev) => ({
+        ...prev,
+        pre: !hasPreContent(note),
+        next: !hasNextContent(note),
+      }))
     },
-    [setDraft],
+    [hasNextContent, hasPreContent, setDraft],
   )
 
   const informUpdatedDraft = useCallback((storedNotes: Note[]) => {
@@ -258,74 +280,91 @@ function App() {
         nextSteps: first.nextSteps || '',
         nextTasks: first.nextTasks || [],
       })
+      setCollapsed((prev) => ({
+        ...prev,
+        pre: !hasPreContent(first),
+        next: !hasNextContent(first),
+      }))
     } else {
       setSelectedId(null)
       setDraft(emptyDraft())
+      setCollapsed((prev) => ({ ...prev, pre: true, next: true }))
     }
-  }, [setDraft, setSelectedId])
+  }, [hasNextContent, hasPreContent, setDraft, setSelectedId])
 
-  useEffect(() => {
-    const loadFromStorage = async () => {
-      const storedNotesRaw = (await storage.getItem<Note[]>(storageKey('notes'))) || []
-      const storedNotes = normalizeNotes(storedNotesRaw)
-      const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
-      const storedQuickNotes =
-        (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
+  const loadFromStorage = useCallback(async () => {
+    const storedNotesRaw = (await storage.getItem<Note[]>(storageKey('notes'))) || []
+    const storedNotes = normalizeNotes(storedNotesRaw)
+    const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
+    const storedQuickNotes = (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
+    const combinedClients = sortClients([
+      ...DEFAULT_CLIENTS,
+      ...storedClients,
+      ...storedNotes.map((note) => note.client),
+      ...storedQuickNotes.map((note) => note.client),
+    ])
+
+    setClients(combinedClients)
+    setNotes(storedNotes)
+    setQuickNotesCache(storedQuickNotes)
+    informUpdatedDraft(storedNotes)
+    setLoading(false)
+  }, [informUpdatedDraft, normalizeNotes, storageKey])
+
+  const loadFromApi = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/state`, {
+        headers: {
+          ...authHeaders(),
+          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+        },
+      })
+      if (!res.ok) {
+        throw new Error(`API failed: ${res.status}`)
+      }
+      const data = (await res.json()) as { notes?: Note[]; clients?: string[]; quickNotes?: QuickNote[] }
+      const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
+      const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
+      const storedClients = Array.isArray(data.clients) ? data.clients : []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
         ...storedClients,
         ...storedNotes.map((note) => note.client),
         ...storedQuickNotes.map((note) => note.client),
       ])
-
       setClients(combinedClients)
       setNotes(storedNotes)
       setQuickNotesCache(storedQuickNotes)
+      await storage.setItem(storageKey('notes'), storedNotes)
+      await storage.setItem(storageKey('quickNotes'), storedQuickNotes)
+      await storage.setItem(storageKey('clients'), combinedClients)
       informUpdatedDraft(storedNotes)
       setLoading(false)
+    } catch (error) {
+      console.error('API load error', error)
+      await loadFromStorage()
     }
+  }, [authHeaders, informUpdatedDraft, loadFromStorage, normalizeNotes, storageKey])
 
-    const loadFromApi = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/state`, {
-          headers: {
-            ...authHeaders(),
-            ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
-          },
-        })
-        if (!res.ok) {
-          throw new Error(`API failed: ${res.status}`)
-        }
-        const data = (await res.json()) as { notes?: Note[]; clients?: string[]; quickNotes?: QuickNote[] }
-        const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
-        const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
-        const storedClients = Array.isArray(data.clients) ? data.clients : []
-        const combinedClients = sortClients([
-          ...DEFAULT_CLIENTS,
-          ...storedClients,
-          ...storedNotes.map((note) => note.client),
-          ...storedQuickNotes.map((note) => note.client),
-        ])
-        setClients(combinedClients)
-        setNotes(storedNotes)
-        setQuickNotesCache(storedQuickNotes)
-        await storage.setItem(storageKey('notes'), storedNotes)
-        await storage.setItem(storageKey('quickNotes'), storedQuickNotes)
-        await storage.setItem(storageKey('clients'), combinedClients)
-        informUpdatedDraft(storedNotes)
-        setLoading(false)
-      } catch (error) {
-        console.error('API load error', error)
-        await loadFromStorage()
-      }
-    }
-
+  useEffect(() => {
     if (API_BASE) {
       void loadFromApi()
     } else {
       void loadFromStorage()
     }
-  }, [authHeaders, informUpdatedDraft, normalizeNotes, storageKey])
+  }, [loadFromApi, loadFromStorage])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (API_BASE) {
+        void loadFromApi()
+      } else {
+        void loadFromStorage()
+      }
+    }
+    window.addEventListener('actas:data-imported', handleRefresh)
+    return () => window.removeEventListener('actas:data-imported', handleRefresh)
+  }, [loadFromApi, loadFromStorage])
 
   useEffect(() => {
     notesRef.current = notes
@@ -755,9 +794,32 @@ function App() {
     return () => clearTimeout(timeout)
   }, [dirty, saveDraft])
 
+  const resolveHashNoteId = useCallback(() => {
+    const hash = window.location.hash || ''
+    const noteId = hash.startsWith('#') ? hash.slice(1) : hash
+    return noteId.trim()
+  }, [])
+
   const handleSelectNote = (note: Note) => {
     jumpToNote(note.id)
   }
+
+  useEffect(() => {
+    if (!notes.length) return
+    const noteId = resolveHashNoteId()
+    if (!noteId || noteId === selectedId) return
+    jumpToNote(noteId)
+  }, [notes, resolveHashNoteId, jumpToNote, selectedId])
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const noteId = resolveHashNoteId()
+      if (!noteId || noteId === selectedId) return
+      jumpToNote(noteId)
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [jumpToNote, resolveHashNoteId, selectedId])
 
   const filteredNotes = useMemo(() => {
     const searchTerm = filters.search.toLowerCase()
@@ -777,6 +839,11 @@ function App() {
     })
   }, [notes, filters])
 
+  const clientsWithNotes = useMemo(() => {
+    const unique = new Set(notes.map((note) => note.client).filter(Boolean))
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  }, [notes])
+
   const filteredClients = useMemo(() => {
     const q = draft.client.trim().toLowerCase()
     const base = q
@@ -793,33 +860,7 @@ function App() {
     setDraft(fresh)
     setSelectedId(null)
     setDirty(false)
-  }
-
-  const handleCopy = async () => {
-    const markdownActa = draft.content ? turndown.turndown(draft.content) : ''
-    const markdownPrevias = draft.preNotes ? turndown.turndown(draft.preNotes) : ''
-    const markdownNext = draft.nextSteps ? turndown.turndown(draft.nextSteps) : ''
-    const checklist = draft.nextTasks
-      .filter((t) => t.text.trim())
-      .map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`)
-      .join('\n')
-    const text = `# ${draft.title || 'Acta sin título'}\nCliente: ${
-      draft.client || 'Sin cliente'
-    }\nTipo: ${draft.meetingType === 'interna' ? 'Interna' : 'Con cliente'}\nFecha: ${
-      draft.date || today()
-    }\n\n## Notas previas\n${markdownPrevias}\n\n## Acta\n${markdownActa}\n\n## Próximos pasos\n${markdownNext}\n${
-      checklist ? `\nChecklist:\n${checklist}` : ''
-    }`
-
-    try {
-      await navigator.clipboard.writeText(text)
-      setMessage('Copiado al portapapeles')
-      setTimeout(() => setMessage(null), 1500)
-    } catch (error) {
-      setMessage('No se pudo copiar')
-      setTimeout(() => setMessage(null), 1500)
-      console.error(error)
-    }
+    setCollapsed((prev) => ({ ...prev, pre: true, next: true }))
   }
 
   const handleExport = () => {
@@ -1037,13 +1078,6 @@ function App() {
             </button>
             <button
               type="button"
-              onClick={handleCopy}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
-            >
-              Copiar al portapapeles
-            </button>
-            <button
-              type="button"
               onClick={handleExport}
               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-primary-200 hover:bg-primary-50"
             >
@@ -1108,7 +1142,7 @@ function App() {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
               >
                 <option value="all">Todos los clientes</option>
-                {clients.map((client) => (
+                {clientsWithNotes.map((client) => (
                   <option key={client} value={client}>
                     {client}
                   </option>
@@ -1198,7 +1232,9 @@ function App() {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase text-slate-500">Últimas actas</p>
-                <span className="text-[11px] font-medium text-slate-400">5 más recientes</span>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {filteredNotes.length} en total
+                </span>
               </div>
               {loading && <p className="text-sm text-slate-500">Cargando notas...</p>}
               {!loading && !filteredNotes.length && (
@@ -1206,41 +1242,43 @@ function App() {
                   No hay actas todavía. Crea una nueva para empezar.
                 </p>
               )}
-              {filteredNotes.slice(0, 5).map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => handleSelectNote(note)}
-                  className={`w-full rounded-xl border px-3 py-2.5 text-left shadow-sm transition ${
-                    note.id === selectedId
-                      ? 'border-primary-200 bg-primary-50'
-                      : 'border-slate-200 bg-white hover:border-primary-100 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span
-                      className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        note.meetingType === 'interna'
-                          ? 'bg-slate-200 text-slate-700'
-                          : 'bg-primary-100 text-primary-700'
-                      }`}
-                    >
-                      {note.meetingType === 'interna' ? 'Interna' : 'Cliente'}
-                    </span>
-                    <span className="text-xs text-slate-400">{formatDate(note.date)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pb-1">
-                    <h3 className="line-clamp-1 text-sm font-semibold text-slate-900">
-                      {note.title || 'Sin título'}
-                    </h3>
-                  </div>
-                  <p className="text-xs font-medium text-primary-700">
-                    {note.client || 'Sin cliente'}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                    {stripHtml(note.content) || stripHtml(note.preNotes)}
-                  </p>
-                </button>
-              ))}
+              <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+                {filteredNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => handleSelectNote(note)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left shadow-sm transition ${
+                      note.id === selectedId
+                        ? 'border-primary-200 bg-primary-50'
+                        : 'border-slate-200 bg-white hover:border-primary-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span
+                        className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          note.meetingType === 'interna'
+                            ? 'bg-slate-200 text-slate-700'
+                            : 'bg-primary-100 text-primary-700'
+                        }`}
+                      >
+                        {note.meetingType === 'interna' ? 'Interna' : 'Cliente'}
+                      </span>
+                      <span className="text-xs text-slate-400">{formatDate(note.date)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pb-1">
+                      <h3 className="line-clamp-1 text-sm font-semibold text-slate-900">
+                        {note.title || 'Sin título'}
+                      </h3>
+                    </div>
+                    <p className="text-xs font-medium text-primary-700">
+                      {note.client || 'Sin cliente'}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                      {stripHtml(note.content) || stripHtml(note.preNotes)}
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
           </aside>
 
@@ -1470,28 +1508,31 @@ function App() {
                   )}
                   <button
                     type="button"
-                    aria-label="Plegar o desplegar notas previas"
-                    className="flex h-8 w-8 items-center justify-center bg-transparent text-slate-700 transition hover:text-primary-700"
                     onClick={() => setCollapsed((prev) => ({ ...prev, pre: !prev.pre }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                      collapsed.pre
+                        ? 'border-slate-200 bg-slate-100'
+                        : 'border-primary-300 bg-primary-600'
+                    }`}
+                    aria-pressed={!collapsed.pre}
+                    aria-label="Mostrar notas previas"
                   >
-                    <span className="text-lg leading-none">{collapsed.pre ? '⌄' : '⌃'}</span>
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                        collapsed.pre ? 'translate-x-0.5' : 'translate-x-5'
+                      }`}
+                    />
                   </button>
                 </div>
               </div>
               {!collapsed.pre && <EditorContent editor={preNotesEditor} />}
-              {collapsed.pre && (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  {stripHtml(draft.preNotes) || 'Sin notas previas'}
-                </p>
-              )}
             </div>
 
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase text-slate-500">Acta</p>
                 <div className="flex items-center gap-2">
-                  {!collapsed.acta && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                  <div className="flex flex-nowrap items-center gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
                       <ToolbarButton
                         label="Negrita"
                         onClick={() => editor?.chain().focus().toggleBold().run()}
@@ -1579,101 +1620,112 @@ function App() {
                         <span className="text-base">↻</span>
                       </ToolbarButton>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Plegar o desplegar acta"
-                    className="flex h-8 w-8 items-center justify-center bg-transparent text-slate-700 transition hover:text-primary-700"
-                    onClick={() => setCollapsed((prev) => ({ ...prev, acta: !prev.acta }))}
-                  >
-                    <span className="text-lg leading-none">{collapsed.acta ? '⌄' : '⌃'}</span>
-                  </button>
                 </div>
               </div>
-              {!collapsed.acta && <EditorContent editor={editor} />}
-              {collapsed.acta && (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  {stripHtml(draft.content) || 'Sin contenido de acta'}
-                </p>
-              )}
+              <EditorContent editor={editor} />
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="col-span-full flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase text-slate-500">Próximos pasos</p>
-                <span className="text-[11px] font-medium text-slate-400">Checklist y notas</span>
-              </div>
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase text-slate-500">Checklist</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTaskText}
-                    onChange={(e) => setNewTaskText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleAddTask()
-                      }
-                    }}
-                    placeholder="Añadir tarea..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddTask}
-                    className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                  >
-                    Añadir
-                  </button>
+              <div className="col-span-full flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Próximos pasos</p>
+                  <span className="text-[11px] font-medium text-slate-400">Checklist y notas</span>
                 </div>
-                <div className="space-y-2">
-                  {draft.nextTasks.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                      Aún no hay tareas. Añade las próximas acciones.
-                    </p>
-                  )}
-                  {draft.nextTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={task.done}
-                        onChange={() => handleToggleTask(task.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
-                      />
+                <button
+                  type="button"
+                  onClick={() => setCollapsed((prev) => ({ ...prev, next: !prev.next }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                    collapsed.next
+                      ? 'border-slate-200 bg-slate-100'
+                      : 'border-primary-300 bg-primary-600'
+                  }`}
+                  aria-pressed={!collapsed.next}
+                  aria-label="Mostrar próximos pasos"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                      collapsed.next ? 'translate-x-0.5' : 'translate-x-5'
+                    }`}
+                  />
+                </button>
+              </div>
+              {!collapsed.next && (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase text-slate-500">Checklist</p>
+                    <div className="flex gap-2">
                       <input
                         type="text"
-                        value={task.text}
-                        onChange={(e) => handleEditTask(task.id, e.target.value)}
-                        className={`flex-1 rounded-md border border-transparent px-1 py-0.5 text-sm transition focus:border-primary-200 focus:outline-none focus:ring-1 focus:ring-primary-100 ${
-                          task.done ? 'text-slate-400 line-through' : 'text-slate-800'
-                        }`}
-                        placeholder="Tarea sin texto"
+                        value={newTaskText}
+                        onChange={(e) => setNewTaskText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddTask()
+                          }
+                        }}
+                        placeholder="Añadir tarea..."
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
                       />
                       <button
                         type="button"
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                        aria-label="Eliminar tarea"
-                        title="Eliminar tarea"
+                        onClick={handleAddTask}
+                        className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
                       >
-                        <span className="text-base leading-none">✕</span>
+                        Añadir
                       </button>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      {draft.nextTasks.length === 0 && (
+                        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                          Aún no hay tareas. Añade las próximas acciones.
+                        </p>
+                      )}
+                      {draft.nextTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={task.done}
+                            onChange={() => handleToggleTask(task.id)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
+                          />
+                          <input
+                            type="text"
+                            value={task.text}
+                            onChange={(e) => handleEditTask(task.id, e.target.value)}
+                            className={`flex-1 rounded-md border border-transparent px-1 py-0.5 text-sm transition focus:border-primary-200 focus:outline-none focus:ring-1 focus:ring-primary-100 ${
+                              task.done ? 'text-slate-400 line-through' : 'text-slate-800'
+                            }`}
+                            placeholder="Tarea sin texto"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                            aria-label="Eliminar tarea"
+                            title="Eliminar tarea"
+                          >
+                            <span className="text-base leading-none">✕</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Notas de próximos pasos</p>
-                  <span className="text-[11px] font-medium text-slate-400">Breve contexto</span>
-                </div>
-                <EditorContent editor={nextStepsEditor} />
-              </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase text-slate-500">
+                        Notas de próximos pasos
+                      </p>
+                      <span className="text-[11px] font-medium text-slate-400">Breve contexto</span>
+                    </div>
+                    <EditorContent editor={nextStepsEditor} />
+                  </div>
+                </>
+              )}
             </div>
           </main>
         </div>
