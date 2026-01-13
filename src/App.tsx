@@ -54,6 +54,16 @@ type QuickNote = {
   updatedAt: string
 }
 
+type Task = {
+  id: string
+  title: string
+  client: string
+  createdAt: string
+  bucket?: 'today' | 'week' | 'none'
+  order?: number
+  done: boolean
+}
+
 type Filters = {
   search: string
   client: string
@@ -152,10 +162,13 @@ function App() {
   const [clients, setClients] = useState<string[]>(sortClients(DEFAULT_CLIENTS))
   const [filters, setFilters] = useState<Filters>({ search: '', client: 'all', date: '' })
   const [quickNotesCache, setQuickNotesCache] = useState<QuickNote[]>([])
+  const [tasksCache, setTasksCache] = useState<Task[]>([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
+  const [undoActa, setUndoActa] = useState<Note | null>(null)
+  const undoTimeoutRef = useRef<number | null>(null)
   const [collapsed, setCollapsed] = useState<{ pre: boolean; next: boolean }>({
     pre: true,
     next: true,
@@ -206,7 +219,12 @@ function App() {
   }, [])
 
   const syncState = useCallback(
-    async (notesToSave: Note[], clientsToSave: string[], quickNotesToSave?: QuickNote[]) => {
+    async (
+      notesToSave: Note[],
+      clientsToSave: string[],
+      quickNotesToSave?: QuickNote[],
+      tasksToSave?: Task[],
+    ) => {
       if (!API_BASE) return
       try {
         await fetch(`${API_BASE}/api/state`, {
@@ -220,13 +238,14 @@ function App() {
             notes: notesToSave,
             clients: clientsToSave,
             quickNotes: quickNotesToSave ?? quickNotesCache,
+            tasks: tasksToSave ?? tasksCache,
           }),
         })
       } catch (error) {
         console.error('Sync error', error)
       }
     },
-    [authHeaders, quickNotesCache],
+    [authHeaders, quickNotesCache, tasksCache],
   )
 
   const hasPreContent = useCallback((note: Pick<NoteDraft, 'preNotes'>) => {
@@ -297,16 +316,19 @@ function App() {
     const storedNotes = normalizeNotes(storedNotesRaw)
     const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
     const storedQuickNotes = (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
+    const storedTasks = (await storage.getItem<Task[]>(storageKey('tasks'))) || []
     const combinedClients = sortClients([
       ...DEFAULT_CLIENTS,
       ...storedClients,
       ...storedNotes.map((note) => note.client),
       ...storedQuickNotes.map((note) => note.client),
+      ...storedTasks.map((task) => task.client),
     ])
 
     setClients(combinedClients)
     setNotes(storedNotes)
     setQuickNotesCache(storedQuickNotes)
+    setTasksCache(storedTasks)
     informUpdatedDraft(storedNotes)
     setLoading(false)
   }, [informUpdatedDraft, normalizeNotes, storageKey])
@@ -322,21 +344,30 @@ function App() {
       if (!res.ok) {
         throw new Error(`API failed: ${res.status}`)
       }
-      const data = (await res.json()) as { notes?: Note[]; clients?: string[]; quickNotes?: QuickNote[] }
+      const data = (await res.json()) as {
+        notes?: Note[]
+        clients?: string[]
+        quickNotes?: QuickNote[]
+        tasks?: Task[]
+      }
       const storedNotes = normalizeNotes(Array.isArray(data.notes) ? data.notes : [])
       const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
+      const storedTasks = Array.isArray(data.tasks) ? data.tasks : []
       const storedClients = Array.isArray(data.clients) ? data.clients : []
       const combinedClients = sortClients([
         ...DEFAULT_CLIENTS,
         ...storedClients,
         ...storedNotes.map((note) => note.client),
         ...storedQuickNotes.map((note) => note.client),
+        ...storedTasks.map((task) => task.client),
       ])
       setClients(combinedClients)
       setNotes(storedNotes)
       setQuickNotesCache(storedQuickNotes)
+      setTasksCache(storedTasks)
       await storage.setItem(storageKey('notes'), storedNotes)
       await storage.setItem(storageKey('quickNotes'), storedQuickNotes)
+      await storage.setItem(storageKey('tasks'), storedTasks)
       await storage.setItem(storageKey('clients'), combinedClients)
       informUpdatedDraft(storedNotes)
       setLoading(false)
@@ -363,7 +394,11 @@ function App() {
       }
     }
     window.addEventListener('actas:data-imported', handleRefresh)
-    return () => window.removeEventListener('actas:data-imported', handleRefresh)
+    window.addEventListener('actas:tasks-updated', handleRefresh)
+    return () => {
+      window.removeEventListener('actas:data-imported', handleRefresh)
+      window.removeEventListener('actas:tasks-updated', handleRefresh)
+    }
   }, [loadFromApi, loadFromStorage])
 
   useEffect(() => {
@@ -999,9 +1034,7 @@ function App() {
 
   const handleDeleteNote = async () => {
     if (!selectedId) return
-    const confirmDelete = window.confirm('¿Eliminar esta acta? Esta acción no se puede deshacer.')
-    if (!confirmDelete) return
-
+    const deleted = notes.find((note) => note.id === selectedId) || null
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
     await storage.setItem(storageKey('notes'), remaining)
@@ -1026,8 +1059,28 @@ function App() {
       setDraft(emptyDraft())
     }
     setDirty(false)
+    if (undoTimeoutRef.current) {
+      window.clearTimeout(undoTimeoutRef.current)
+    }
+    if (deleted) {
+      setUndoActa(deleted)
+    }
     setMessage('Acta eliminada')
-    setTimeout(() => setMessage(null), 1500)
+    undoTimeoutRef.current = window.setTimeout(() => {
+      setUndoActa(null)
+      setMessage(null)
+    }, 5000)
+  }
+
+  const handleUndoDelete = async () => {
+    if (!undoActa) return
+    const restored = sortNotes([undoActa, ...notes])
+    setNotes(restored)
+    await storage.setItem(storageKey('notes'), restored)
+    await syncState(restored, clients, quickNotesCache)
+    setUndoActa(null)
+    setMessage('Acta restaurada')
+    setTimeout(() => setMessage(null), 1200)
   }
 
   const handleClientUpdate = (index: number, value: string) => {
@@ -1288,7 +1341,20 @@ function App() {
                 {saving ? 'Guardando…' : dirty ? 'Cambios pendientes' : 'Guardado'}
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
               </div>
-              {message && <span className="text-xs font-medium text-primary-700">{message}</span>}
+              {message && (
+                <div className="flex items-center gap-2 text-xs font-medium text-primary-700">
+                  <span>{message}</span>
+                  {undoActa && (
+                    <button
+                      type="button"
+                      onClick={handleUndoDelete}
+                      className="rounded-full border border-primary-200 bg-white px-2.5 py-1 text-xs font-semibold text-primary-700 transition hover:bg-primary-50"
+                    >
+                      Deshacer
+                    </button>
+                  )}
+                </div>
+              )}
               {selectedNote && (
                 <span className="text-xs text-slate-500">
                   Última edición: {formatDate(selectedNote.updatedAt)}

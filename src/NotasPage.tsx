@@ -27,6 +27,16 @@ type QuickNote = {
 
 type MeetingNote = Record<string, any>
 
+type Task = {
+  id: string
+  title: string
+  client: string
+  createdAt: string
+  bucket?: 'today' | 'week' | 'none'
+  order?: number
+  done: boolean
+}
+
 type QuickNoteDraft = {
   id?: string
   title: string
@@ -75,11 +85,14 @@ function NotasPage() {
   const [filters, setFilters] = useState({ search: '', client: 'all' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [undoNote, setUndoNote] = useState<QuickNote | null>(null)
+  const undoTimeoutRef = useRef<number | null>(null)
   const [clients, setClients] = useState<string[]>(DEFAULT_CLIENTS)
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
   const [showClientManager, setShowClientManager] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [actasMirror, setActasMirror] = useState<MeetingNote[]>([])
+  const [tasksMirror, setTasksMirror] = useState<Task[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const storageKey = useCallback(
     (name: string) => `${name}:${(user?.email || 'local').toLowerCase()}`,
@@ -96,14 +109,21 @@ function NotasPage() {
       (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
     const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
     const storedActas = (await storage.getItem<MeetingNote[]>(storageKey('notes'))) || []
+    const storedTasks = (await storage.getItem<Task[]>(storageKey('tasks'))) || []
     const combinedClients = Array.from(
-      new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
+      new Set([
+        ...DEFAULT_CLIENTS,
+        ...storedClients,
+        ...storedQuickNotes.map((n) => n.client),
+        ...storedTasks.map((task) => task.client),
+      ]),
     ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
 
     const sorted = sortQuickNotes(storedQuickNotes)
     setNotes(sorted)
     setClients(combinedClients)
     setActasMirror(storedActas)
+    setTasksMirror(storedTasks)
     if (sorted[0]) {
       setSelectedId(sorted[0].id)
       setDraft({
@@ -131,20 +151,29 @@ function NotasPage() {
         notes?: MeetingNote[]
         clients?: string[]
         quickNotes?: QuickNote[]
+        tasks?: Task[]
       }
       const storedQuickNotes = Array.isArray(data.quickNotes) ? data.quickNotes : []
       const storedClients = Array.isArray(data.clients) ? data.clients : []
       const storedActas = Array.isArray(data.notes) ? data.notes : []
+      const storedTasks = Array.isArray(data.tasks) ? data.tasks : []
       const combinedClients = Array.from(
-        new Set([...DEFAULT_CLIENTS, ...storedClients, ...storedQuickNotes.map((n) => n.client)]),
+        new Set([
+          ...DEFAULT_CLIENTS,
+          ...storedClients,
+          ...storedQuickNotes.map((n) => n.client),
+          ...storedTasks.map((task) => task.client),
+        ]),
       ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
       const sorted = sortQuickNotes(storedQuickNotes)
       setNotes(sorted)
       setClients(combinedClients)
       setActasMirror(storedActas)
+      setTasksMirror(storedTasks)
       await storage.setItem(storageKey('quickNotes'), sorted)
       await storage.setItem(storageKey('clients'), combinedClients)
       await storage.setItem(storageKey('notes'), storedActas)
+      await storage.setItem(storageKey('tasks'), storedTasks)
       if (sorted[0]) {
         setSelectedId(sorted[0].id)
         setDraft({
@@ -178,7 +207,11 @@ function NotasPage() {
       }
     }
     window.addEventListener('actas:data-imported', handleRefresh)
-    return () => window.removeEventListener('actas:data-imported', handleRefresh)
+    window.addEventListener('actas:tasks-updated', handleRefresh)
+    return () => {
+      window.removeEventListener('actas:data-imported', handleRefresh)
+      window.removeEventListener('actas:tasks-updated', handleRefresh)
+    }
   }, [loadFromApi, loadFromStorage])
 
   useEffect(() => {
@@ -263,6 +296,7 @@ function NotasPage() {
     quickNotesToSave: QuickNote[],
     clientsToSave: string[],
     actasToSave: MeetingNote[],
+    tasksToSave: Task[],
   ) => {
     if (!API_BASE) return
     try {
@@ -277,6 +311,7 @@ function NotasPage() {
           notes: actasToSave,
           clients: clientsToSave,
           quickNotes: quickNotesToSave,
+          tasks: tasksToSave,
         }),
       })
     } catch (error) {
@@ -296,7 +331,7 @@ function NotasPage() {
       if (prev.some((c) => c.toLowerCase() === cleaned.toLowerCase())) return prev
       const next = [...prev, cleaned].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
       void storage.setItem(storageKey('clients'), next)
-      void syncState(notes, next, actasMirror)
+      void syncState(notes, next, actasMirror, tasksMirror)
       return next
     })
   }
@@ -371,7 +406,7 @@ function NotasPage() {
     const sorted = sortQuickNotes(nextNotes)
     setNotes(sorted)
     await storage.setItem(storageKey('quickNotes'), sorted)
-    await syncState(sorted, clients, actasMirror)
+    await syncState(sorted, clients, actasMirror, tasksMirror)
     setSaving(false)
     setMessage('Nota guardada')
     setTimeout(() => setMessage(null), 1200)
@@ -387,12 +422,11 @@ function NotasPage() {
 
   const handleDeleteNote = async () => {
     if (!selectedId) return
-    const confirmDelete = window.confirm('¿Eliminar esta nota? Esta acción no se puede deshacer.')
-    if (!confirmDelete) return
+    const deleted = notes.find((note) => note.id === selectedId) || null
     const remaining = notes.filter((note) => note.id !== selectedId)
     setNotes(remaining)
     await storage.setItem(storageKey('quickNotes'), remaining)
-    await syncState(remaining, clients, actasMirror)
+    await syncState(remaining, clients, actasMirror, tasksMirror)
     if (remaining.length) {
       const next = remaining[0]
       setSelectedId(next.id)
@@ -413,7 +447,27 @@ function NotasPage() {
         editor.commands.setContent('<p></p>', { emitUpdate: false })
       }
     }
+    if (undoTimeoutRef.current) {
+      window.clearTimeout(undoTimeoutRef.current)
+    }
+    if (deleted) {
+      setUndoNote(deleted)
+    }
     setMessage('Nota eliminada')
+    undoTimeoutRef.current = window.setTimeout(() => {
+      setUndoNote(null)
+      setMessage(null)
+    }, 5000)
+  }
+
+  const handleUndoDelete = async () => {
+    if (!undoNote) return
+    const restored = sortQuickNotes([undoNote, ...notes])
+    setNotes(restored)
+    await storage.setItem(storageKey('quickNotes'), restored)
+    await syncState(restored, clients, actasMirror, tasksMirror)
+    setUndoNote(null)
+    setMessage('Nota restaurada')
     setTimeout(() => setMessage(null), 1200)
   }
 
@@ -427,7 +481,7 @@ function NotasPage() {
         a.localeCompare(b, 'es', { sensitivity: 'base' }),
       )
       void storage.setItem(storageKey('clients'), sorted)
-      void syncState(notes, sorted, actasMirror)
+      void syncState(notes, sorted, actasMirror, tasksMirror)
       return sorted
     })
   }
@@ -441,7 +495,7 @@ function NotasPage() {
     setNotes(updatedNotes)
     void storage.setItem(storageKey('clients'), nextClients)
     void storage.setItem(storageKey('quickNotes'), updatedNotes)
-    void syncState(updatedNotes, nextClients, actasMirror)
+    void syncState(updatedNotes, nextClients, actasMirror, tasksMirror)
   }
 
   const handleClientAdd = () => {
@@ -564,7 +618,20 @@ function NotasPage() {
               </svg>
               <span className="sr-only">Gestionar clientes</span>
             </button>
-            {message && <span className="text-xs font-semibold text-emerald-700">{message}</span>}
+            {message && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                <span>{message}</span>
+                {undoNote && (
+                  <button
+                    type="button"
+                    onClick={handleUndoDelete}
+                    className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                  >
+                    Deshacer
+                  </button>
+                )}
+              </div>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -652,7 +719,20 @@ function NotasPage() {
                 {saving ? 'Guardando…' : 'Listo'}
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
               </div>
-              {message && <span className="text-xs font-medium text-emerald-700">{message}</span>}
+              {message && (
+                <div className="flex items-center gap-2 text-xs font-medium text-emerald-700">
+                  <span>{message}</span>
+                  {undoNote && (
+                    <button
+                      type="button"
+                      onClick={handleUndoDelete}
+                      className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    >
+                      Deshacer
+                    </button>
+                  )}
+                </div>
+              )}
               {selectedNote && (
                 <span className="text-xs text-slate-500">
                   Última edición: {formatDate(selectedNote.updatedAt)}

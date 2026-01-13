@@ -6,6 +6,7 @@ import Papa from 'papaparse'
 import ActasPage from './App'
 import HomePage from './HomePage'
 import NotasPage from './NotasPage'
+import TasksPage from './TasksPage'
 import { useAuth } from './auth'
 import LoginPage from './LoginPage'
 import { DEFAULT_CLIENTS } from './constants/clients'
@@ -37,6 +38,16 @@ type QuickNote = {
   content: string
   createdAt: string
   updatedAt: string
+}
+
+type Task = {
+  id: string
+  title: string
+  client: string
+  createdAt: string
+  bucket?: 'today' | 'week' | 'none'
+  order?: number
+  done: boolean
 }
 
 const storage = localforage.createInstance({
@@ -141,7 +152,12 @@ function Header() {
     setTimeout(() => setMessage(null), 1200)
   }
 
-  const syncState = async (notesToSave: ActaNote[], clientsToSave: string[], quickNotesToSave: QuickNote[]) => {
+  const syncState = async (
+    notesToSave: ActaNote[],
+    clientsToSave: string[],
+    quickNotesToSave: QuickNote[],
+    tasksToSave: Task[],
+  ) => {
     if (!API_BASE) return
     try {
       await fetch(`${API_BASE}/api/state`, {
@@ -155,6 +171,7 @@ function Header() {
           notes: notesToSave,
           clients: clientsToSave,
           quickNotes: quickNotesToSave,
+          tasks: tasksToSave,
         }),
       })
     } catch (error) {
@@ -182,6 +199,7 @@ function Header() {
     const storedQuickNotes =
       (await storage.getItem<QuickNote[]>(storageKey('quickNotes'))) || []
     const storedClients = (await storage.getItem<string[]>(storageKey('clients'))) || []
+    const storedTasks = (await storage.getItem<Task[]>(storageKey('tasks'))) || []
 
     const parsed = await Promise.all(files.map((file) => parseCsvFile(file)))
 
@@ -263,7 +281,7 @@ function Header() {
     await storage.setItem(storageKey('notes'), mergedActas)
     await storage.setItem(storageKey('quickNotes'), mergedQuickNotes)
     await storage.setItem(storageKey('clients'), updatedClients)
-    await syncState(mergedActas, updatedClients, mergedQuickNotes)
+    await syncState(mergedActas, updatedClients, mergedQuickNotes, storedTasks)
 
     setMessage('Importación lista')
     setTimeout(() => setMessage(null), 1500)
@@ -300,6 +318,16 @@ function Header() {
             }`}
           >
             Notas
+          </Link>
+          <Link
+            to="/tareas"
+            className={`rounded-full px-3 py-1 transition ${
+              isActive('/tareas')
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-primary-50'
+            }`}
+          >
+            Tareas
           </Link>
         </nav>
         <div className="flex items-center gap-2">
@@ -414,6 +442,7 @@ function RouterApp() {
         <Route path="/" element={<HomePage />} />
         <Route path="/actas" element={<ActasPage />} />
         <Route path="/notas" element={<NotasPage />} />
+        <Route path="/tareas" element={<TasksPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

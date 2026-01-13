@@ -126,7 +126,8 @@ const coerceState = (payload) => {
   const notes = Array.isArray(payload?.notes) ? payload.notes : []
   const clients = Array.isArray(payload?.clients) ? payload.clients : []
   const quickNotes = Array.isArray(payload?.quickNotes) ? payload.quickNotes : []
-  return { notes, clients, quickNotes }
+  const tasks = Array.isArray(payload?.tasks) ? payload.tasks : []
+  return { notes, clients, quickNotes, tasks }
 }
 
 const resolveUserEmail = (req) => {
