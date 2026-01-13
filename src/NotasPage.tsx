@@ -251,7 +251,7 @@ function NotasPage() {
     editorProps: {
       attributes: {
         class:
-          'tiptap prose prose-slate max-w-none rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-inner focus:outline-none',
+          'tiptap prose prose-slate max-w-none h-[180px] resize-y overflow-auto rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-inner focus:outline-none',
       },
     },
     onUpdate: ({ editor }) => {
