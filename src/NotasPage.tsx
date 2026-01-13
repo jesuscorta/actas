@@ -557,7 +557,7 @@ function NotasPage() {
         setClients(updatedClients)
         await storage.setItem(storageKey('quickNotes'), mergedNotes)
         await storage.setItem(storageKey('clients'), updatedClients)
-        await syncState(mergedNotes, updatedClients, actasMirror)
+        await syncState(mergedNotes, updatedClients, actasMirror, tasksMirror)
         setMessage('Importación lista')
         setTimeout(() => setMessage(null), 1500)
       },
