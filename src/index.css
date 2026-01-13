@@ -20,6 +20,7 @@ body {
     radial-gradient(circle at 30% 90%, #e2e8f0 0, transparent 30%), #f8fafc;
 }
 
+
 * {
   box-sizing: border-box;
 }
@@ -28,6 +29,7 @@ body {
   background-color: #bfdbfe;
   color: #0f172a;
 }
+
 
 .tiptap {
   min-height: 180px;
@@ -56,6 +58,7 @@ body {
   color: #2563eb;
   text-decoration: underline;
 }
+
 
 .tiptap strong {
   font-weight: 700;
