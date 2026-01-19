@@ -739,15 +739,15 @@ function App() {
         return prev
       }
       const next = sortClients([...prev, cleaned])
-      void storage.setItem('clients', next)
-      void syncState(notesRef.current, next, quickNotesCache)
+      void storage.setItem(storageKey('clients'), next)
+      void syncState(notesRef.current, next, quickNotesCache, tasksCache)
       return next
     })
 
     if (setOnDraft) {
       setDraft((prev) => ({ ...prev, client: cleaned }))
     }
-  }, [])
+  }, [quickNotesCache, storageKey, syncState, tasksCache])
 
   const handleDraftChange = (patch: Partial<NoteDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
