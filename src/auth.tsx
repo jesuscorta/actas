@@ -127,8 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authHeaders = useCallback(() => {
     const headers: Record<string, string> = {}
     if (idToken) headers.Authorization = `Bearer ${idToken}`
+    if (user?.email) headers['x-user-email'] = user.email
     return headers
-  }, [idToken])
+  }, [idToken, user?.email])
 
   const value = useMemo<AuthContextValue>(
     () => ({
