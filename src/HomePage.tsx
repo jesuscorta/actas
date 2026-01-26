@@ -7,22 +7,6 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
   : ''
 
-type NextTask = {
-  id: string
-  text: string
-  done: boolean
-}
-
-type ActaNote = {
-  id: string
-  title: string
-  client: string
-  date: string
-  nextTasks: NextTask[]
-  createdAt: string
-  updatedAt: string
-}
-
 type Task = {
   id: string
   title: string
@@ -37,13 +21,6 @@ const storage = localforage.createInstance({
   name: 'actas',
   storeName: 'actas_store',
 })
-
-const sortNotes = (list: ActaNote[]) =>
-  [...list].sort((a, b) => {
-    const byDate = new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
-    if (byDate !== 0) return byDate
-    return new Date(b.createdAt || b.updatedAt).getTime() - new Date(a.createdAt || a.updatedAt).getTime()
-  })
 
 const sortTasks = (list: Task[]) =>
   [...list].sort((a, b) => {
@@ -62,7 +39,6 @@ const formatDate = (value: string) => {
 
 function HomePage() {
   const { authHeaders, user } = useAuth()
-  const [actas, setActas] = useState<ActaNote[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const storageKey = useCallback(
@@ -71,9 +47,7 @@ function HomePage() {
   )
 
   const loadFromStorage = useCallback(async () => {
-    const storedActas = (await storage.getItem<ActaNote[]>(storageKey('notes'))) || []
     const storedTasks = (await storage.getItem<Task[]>(storageKey('tasks'))) || []
-    setActas(sortNotes(storedActas))
     setTasks(sortTasks(storedTasks))
     setLoading(false)
   }, [storageKey])
@@ -88,13 +62,9 @@ function HomePage() {
       if (!res.ok) {
         throw new Error(`API failed: ${res.status}`)
       }
-      const data = (await res.json()) as { notes?: ActaNote[]; tasks?: Task[] }
-      const storedActas = Array.isArray(data.notes) ? data.notes : []
+      const data = (await res.json()) as { tasks?: Task[] }
       const storedTasks = Array.isArray(data.tasks) ? data.tasks : []
-      const sorted = sortNotes(storedActas)
-      setActas(sorted)
       setTasks(sortTasks(storedTasks))
-      await storage.setItem(storageKey('notes'), sorted)
       await storage.setItem(storageKey('tasks'), storedTasks)
       setLoading(false)
     } catch (error) {
@@ -122,15 +92,6 @@ function HomePage() {
     window.addEventListener('actas:data-imported', handleRefresh)
     return () => window.removeEventListener('actas:data-imported', handleRefresh)
   }, [loadFromApi, loadFromStorage])
-
-  const pendingGroups = useMemo(() => {
-    return actas
-      .map((note) => {
-        const pending = (note.nextTasks || []).filter((task) => !task.done && task.text?.trim())
-        return pending.length ? { note, pending } : null
-      })
-      .filter(Boolean) as { note: ActaNote; pending: NextTask[] }[]
-  }, [actas])
 
   const todayTasks = useMemo(() => {
     return sortTasks(tasks.filter((task) => !task.done && (task.bucket || 'none') === 'today'))
@@ -176,7 +137,7 @@ function HomePage() {
                 </div>
               </div>
               <p className="text-sm text-slate-600">
-                Crea, edita y exporta actas con formato enriquecido, checklist y menciones.
+                Crea, edita y exporta actas con formato enriquecido y menciones.
               </p>
               <div className="mt-auto text-sm font-semibold text-primary-700">
                 Ir a actas →
@@ -257,142 +218,89 @@ function HomePage() {
           </Link>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold uppercase text-slate-500">Actas</p>
-                <h2 className="text-lg font-bold text-slate-900">Acciones pendientes</h2>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                {pendingGroups.reduce((acc, group) => acc + group.pending.length, 0)} tareas
-              </span>
+        <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold uppercase text-slate-500">Tareas</p>
+              <h2 className="text-lg font-bold text-slate-900">Hoy, mañana y sin fechar</h2>
             </div>
-
-            {loading && <p className="mt-3 text-sm text-slate-500">Cargando tareas...</p>}
-            {!loading && pendingGroups.length === 0 && (
-              <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                No hay tareas pendientes en las actas.
-              </p>
-            )}
-            {!loading && pendingGroups.length > 0 && (
-              <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                {pendingGroups.map(({ note, pending }) => (
-                  <Link
-                    key={note.id}
-                    to={`/actas#${note.id}`}
-                    className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 transition hover:border-primary-200 hover:bg-white"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-primary-700">
-                        {note.title || 'Acta sin título'}
-                      </span>
-                      <span className="text-xs text-slate-500">{formatDate(note.date)}</span>
-                    </div>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {note.client || 'Sin cliente'}
-                    </p>
-                    <ul className="mt-2 space-y-1 text-sm text-slate-700">
-                      {pending.map((task) => (
-                        <li key={task.id} className="flex items-start gap-2">
-                          <span className="mt-1 h-2 w-2 rounded-full bg-primary-300" />
-                          <span>{task.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-2 text-xs font-semibold text-primary-700">
-                      Ver acta →
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <span className="text-xs font-semibold text-slate-500">
+              {todayTasks.length + tomorrowTasks.length + noDateTasks.length} tareas
+            </span>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold uppercase text-slate-500">Tareas</p>
-                <h2 className="text-lg font-bold text-slate-900">Hoy, mañana y sin fechar</h2>
+          {loading && <p className="mt-3 text-sm text-slate-500">Cargando tareas...</p>}
+          {!loading && todayTasks.length === 0 && tomorrowTasks.length === 0 && noDateTasks.length === 0 && (
+            <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
+              No hay tareas para hoy o mañana.
+            </p>
+          )}
+          {!loading && (todayTasks.length > 0 || tomorrowTasks.length > 0 || noDateTasks.length > 0) && (
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-amber-700">Hoy</p>
+                  <span className="text-xs text-amber-700">{todayTasks.length}</span>
+                </div>
+                {todayTasks.length === 0 && (
+                  <p className="text-xs text-amber-700/70">Sin tareas para hoy.</p>
+                )}
+                <div className="space-y-2">
+                  {todayTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <div className="font-semibold text-slate-800">{task.title}</div>
+                      <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <span className="text-xs font-semibold text-slate-500">
-                {todayTasks.length + tomorrowTasks.length + noDateTasks.length} tareas
-              </span>
+
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-emerald-700">Mañana</p>
+                  <span className="text-xs text-emerald-700">{tomorrowTasks.length}</span>
+                </div>
+                {tomorrowTasks.length === 0 && (
+                  <p className="text-xs text-emerald-700/70">Sin tareas para mañana.</p>
+                )}
+                <div className="space-y-2">
+                  {tomorrowTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <div className="font-semibold text-slate-800">{task.title}</div>
+                      <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-slate-600">Sin fecha</p>
+                  <span className="text-xs text-slate-600">{noDateTasks.length}</span>
+                </div>
+                {noDateTasks.length === 0 && (
+                  <p className="text-xs text-slate-500">Sin tareas sin fecha.</p>
+                )}
+                <div className="space-y-2">
+                  {noDateTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <div className="font-semibold text-slate-800">{task.title}</div>
+                      <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-
-            {loading && <p className="mt-3 text-sm text-slate-500">Cargando tareas...</p>}
-            {!loading && todayTasks.length === 0 && tomorrowTasks.length === 0 && noDateTasks.length === 0 && (
-              <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                No hay tareas para hoy o mañana.
-              </p>
-            )}
-            {!loading && (todayTasks.length > 0 || tomorrowTasks.length > 0 || noDateTasks.length > 0) && (
-              <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase text-amber-700">Hoy</p>
-                    <span className="text-xs text-amber-700">{todayTasks.length}</span>
-                  </div>
-                  {todayTasks.length === 0 && (
-                    <p className="text-xs text-amber-700/70">Sin tareas para hoy.</p>
-                  )}
-                  <div className="space-y-2">
-                    {todayTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm text-slate-700"
-                      >
-                        <div className="font-semibold text-slate-800">{task.title}</div>
-                        <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase text-emerald-700">Mañana</p>
-                    <span className="text-xs text-emerald-700">{tomorrowTasks.length}</span>
-                  </div>
-                  {tomorrowTasks.length === 0 && (
-                    <p className="text-xs text-emerald-700/70">Sin tareas para mañana.</p>
-                  )}
-                  <div className="space-y-2">
-                    {tomorrowTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm text-slate-700"
-                      >
-                        <div className="font-semibold text-slate-800">{task.title}</div>
-                        <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase text-slate-600">Sin fecha</p>
-                    <span className="text-xs text-slate-600">{noDateTasks.length}</span>
-                  </div>
-                  {noDateTasks.length === 0 && (
-                    <p className="text-xs text-slate-500">Sin tareas sin fecha.</p>
-                  )}
-                  <div className="space-y-2">
-                    {noDateTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                      >
-                        <div className="font-semibold text-slate-800">{task.title}</div>
-                        <div className="text-xs text-slate-500">{task.client || 'Sin cliente'}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </section>
       </div>
     </div>

@@ -24,7 +24,6 @@ type ActaNote = {
   preNotes: string
   content: string
   nextSteps: string
-  nextTasks: { id: string; text: string; done: boolean }[]
   createdAt: string
   updatedAt: string
 }
@@ -127,7 +126,6 @@ function Header() {
         pre_notes_html: note.preNotes,
         content_html: note.content,
         next_steps_html: note.nextSteps,
-        next_tasks_json: JSON.stringify(note.nextTasks || []),
         created_at: note.createdAt,
         updated_at: note.updatedAt,
       })),
@@ -222,21 +220,6 @@ function Header() {
               preNotes: row.pre_notes_html || '',
               content: row.content_html || '',
               nextSteps: row.next_steps_html || '',
-              nextTasks: (() => {
-                try {
-                  const parsedTasks = JSON.parse(row.next_tasks_json || '[]')
-                  if (Array.isArray(parsedTasks)) {
-                    return parsedTasks.map((t) => ({
-                      id: t.id || nanoid(),
-                      text: t.text || '',
-                      done: Boolean(t.done),
-                    }))
-                  }
-                } catch {
-                  return []
-                }
-                return []
-              })(),
               createdAt: row.created_at || new Date().toISOString(),
               updatedAt: row.updated_at || new Date().toISOString(),
             })

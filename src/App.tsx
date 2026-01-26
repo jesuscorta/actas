@@ -26,7 +26,6 @@ type Note = {
   preNotes: string
   content: string
   nextSteps: string
-  nextTasks: { id: string; text: string; done: boolean }[]
   createdAt: string
   updatedAt: string
 }
@@ -40,7 +39,6 @@ type NoteDraft = {
   preNotes: string
   content: string
   nextSteps: string
-  nextTasks: { id: string; text: string; done: boolean }[]
 }
 
 type QuickNote = {
@@ -85,7 +83,6 @@ const emptyDraft = (): NoteDraft => ({
   preNotes: '',
   content: '',
   nextSteps: '',
-  nextTasks: [],
 })
 
 const sortClients = (clients: string[]) =>
@@ -172,7 +169,6 @@ function App() {
     pre: true,
     next: true,
   })
-  const [newTaskText, setNewTaskText] = useState('')
   const [showNewClient, setShowNewClient] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
@@ -203,15 +199,6 @@ function App() {
           meetingType: note.meetingType || 'cliente',
           preNotes: note.preNotes || '',
           nextSteps: note.nextSteps || '',
-          nextTasks: Array.isArray(note.nextTasks)
-            ? note.nextTasks
-            : Array.isArray((note as any).nextTasks)
-              ? ((note as any).nextTasks as any[]).map((t) => ({
-                  id: t.id || nanoid(),
-                  text: t.text || '',
-                  done: Boolean(t.done),
-                }))
-              : [],
         }
       }),
     )
@@ -250,10 +237,8 @@ function App() {
     return Boolean(stripHtml(note.preNotes || '').trim())
   }, [])
 
-  const hasNextContent = useCallback((note: Pick<NoteDraft, 'nextSteps' | 'nextTasks'>) => {
-    const hasNotes = Boolean(stripHtml(note.nextSteps || '').trim())
-    const hasTasks = (note.nextTasks || []).some((task) => task.text?.trim())
-    return hasNotes || hasTasks
+  const hasNextContent = useCallback((note: Pick<NoteDraft, 'nextSteps'>) => {
+    return Boolean(stripHtml(note.nextSteps || '').trim())
   }, [])
 
   const jumpToNote = useCallback(
@@ -270,7 +255,6 @@ function App() {
         preNotes: note.preNotes || '',
         content: note.content,
         nextSteps: note.nextSteps || '',
-        nextTasks: note.nextTasks || [],
       })
       setDirty(false)
       setCollapsed((prev) => ({
@@ -295,7 +279,6 @@ function App() {
         preNotes: first.preNotes || '',
         content: first.content,
         nextSteps: first.nextSteps || '',
-        nextTasks: first.nextTasks || [],
       })
       setCollapsed((prev) => ({
         ...prev,
@@ -758,8 +741,7 @@ function App() {
       !draft.client.trim() &&
       !stripHtml(draft.content || '').trim() &&
       !stripHtml(draft.preNotes || '').trim() &&
-      !stripHtml(draft.nextSteps || '').trim() &&
-      draft.nextTasks.every((t) => !t.text.trim())
+      !stripHtml(draft.nextSteps || '').trim()
     if (isEmpty) {
       setDirty(false)
       setSaving(false)
@@ -783,7 +765,6 @@ function App() {
               preNotes: draft.preNotes,
               content: draft.content,
               nextSteps: draft.nextSteps,
-              nextTasks: draft.nextTasks,
               updatedAt: timestamp,
             }
           : note,
@@ -799,7 +780,6 @@ function App() {
         preNotes: draft.preNotes,
         content: draft.content,
         nextSteps: draft.nextSteps,
-        nextTasks: draft.nextTasks,
         createdAt: timestamp,
         updatedAt: timestamp,
       }
@@ -865,8 +845,7 @@ function App() {
         note.meetingType.toLowerCase().includes(searchTerm) ||
         stripHtml(note.content).toLowerCase().includes(searchTerm) ||
         stripHtml(note.preNotes).toLowerCase().includes(searchTerm) ||
-        stripHtml(note.nextSteps).toLowerCase().includes(searchTerm) ||
-        note.nextTasks.some((t) => t.text.toLowerCase().includes(searchTerm))
+        stripHtml(note.nextSteps).toLowerCase().includes(searchTerm)
       return matchesClient && matchesDate && matchesSearch
     })
   }, [notes, filters])
@@ -906,7 +885,6 @@ function App() {
         pre_notes_html: note.preNotes,
         content_html: note.content,
         next_steps_html: note.nextSteps,
-        next_tasks_json: JSON.stringify(note.nextTasks || []),
         created_at: note.createdAt,
         updated_at: note.updatedAt,
       })),
@@ -943,21 +921,6 @@ function App() {
           preNotes: row.pre_notes_html || '',
           content: row.content_html || '',
           nextSteps: row.next_steps_html || '',
-          nextTasks: (() => {
-            try {
-              const parsed = JSON.parse(row.next_tasks_json || '[]')
-              if (Array.isArray(parsed)) {
-                return parsed.map((t) => ({
-                  id: t.id || nanoid(),
-                  text: t.text || '',
-                  done: Boolean(t.done),
-                }))
-              }
-              return []
-            } catch {
-              return []
-            }
-          })(),
           createdAt: row.created_at || new Date().toISOString(),
           updatedAt: row.updated_at || new Date().toISOString(),
         }))
@@ -996,39 +959,6 @@ function App() {
 
   const selectedNote = useMemo(() => notes.find((n) => n.id === selectedId), [notes, selectedId])
 
-  const handleAddTask = () => {
-    const text = newTaskText.trim()
-    if (!text) return
-    const task = { id: nanoid(), text, done: false }
-    setDraft((prev) => ({ ...prev, nextTasks: [...prev.nextTasks, task] }))
-    setNewTaskText('')
-    setDirty(true)
-  }
-
-  const handleToggleTask = (id: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      nextTasks: prev.nextTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    }))
-    setDirty(true)
-  }
-
-  const handleDeleteTask = (id: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      nextTasks: prev.nextTasks.filter((t) => t.id !== id),
-    }))
-    setDirty(true)
-  }
-
-  const handleEditTask = (id: string, text: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      nextTasks: prev.nextTasks.map((t) => (t.id === id ? { ...t, text } : t)),
-    }))
-    setDirty(true)
-  }
-
   const handleDeleteNote = async () => {
     if (!selectedId) return
     const deleted = notes.find((note) => note.id === selectedId) || null
@@ -1049,7 +979,6 @@ function App() {
         preNotes: next.preNotes,
         content: next.content,
         nextSteps: next.nextSteps,
-        nextTasks: next.nextTasks,
       })
     } else {
       setSelectedId(null)
@@ -1688,11 +1617,11 @@ function App() {
               <EditorContent editor={editor} />
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="col-span-full flex items-center justify-between gap-2">
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold uppercase text-slate-500">Próximos pasos</p>
-                  <span className="text-[11px] font-medium text-slate-400">Checklist y notas</span>
+                  <span className="text-[11px] font-medium text-slate-400">Notas y acuerdos</span>
                 </div>
                 <button
                   type="button"
@@ -1713,72 +1642,7 @@ function App() {
                 </button>
               </div>
               {!collapsed.next && (
-                <>
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase text-slate-500">Checklist</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newTaskText}
-                        onChange={(e) => setNewTaskText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleAddTask()
-                          }
-                        }}
-                        placeholder="Añadir tarea..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddTask}
-                        className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                      >
-                        Añadir
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {draft.nextTasks.length === 0 && (
-                        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                          Aún no hay tareas. Añade las próximas acciones.
-                        </p>
-                      )}
-                      {draft.nextTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={task.done}
-                            onChange={() => handleToggleTask(task.id)}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
-                          />
-                          <input
-                            type="text"
-                            value={task.text}
-                            onChange={(e) => handleEditTask(task.id, e.target.value)}
-                            className={`flex-1 rounded-md border border-transparent px-1 py-0.5 text-sm transition focus:border-primary-200 focus:outline-none focus:ring-1 focus:ring-primary-100 ${
-                              task.done ? 'text-slate-400 line-through' : 'text-slate-800'
-                            }`}
-                            placeholder="Tarea sin texto"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                            aria-label="Eliminar tarea"
-                            title="Eliminar tarea"
-                          >
-                            <span className="text-base leading-none">✕</span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
+                <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold uppercase text-slate-500">
                         Notas de próximos pasos
@@ -1786,8 +1650,7 @@ function App() {
                       <span className="text-[11px] font-medium text-slate-400">Breve contexto</span>
                     </div>
                     <EditorContent editor={nextStepsEditor} />
-                  </div>
-                </>
+                </div>
               )}
             </div>
           </main>

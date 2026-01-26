@@ -50,6 +50,7 @@ function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [createDraft, setCreateDraft] = useState<TaskDraft>(emptyDraft())
   const [filters, setFilters] = useState({ search: '', client: 'all' })
+  const [showCompleted, setShowCompleted] = useState(false)
   const [clients, setClients] = useState<string[]>(DEFAULT_CLIENTS)
   const [actasMirror, setActasMirror] = useState<MeetingNote[]>([])
   const [quickNotesMirror, setQuickNotesMirror] = useState<QuickNote[]>([])
@@ -376,6 +377,7 @@ function TasksPage() {
   const filteredTasks = useMemo(() => {
     const term = filters.search.toLowerCase()
     return tasks.filter((task) => {
+      if (!showCompleted && task.done) return false
       if (filters.client !== 'all' && task.client !== filters.client) return false
       if (!term) return true
       return (
@@ -383,7 +385,7 @@ function TasksPage() {
         task.client.toLowerCase().includes(term)
       )
     })
-  }, [filters, tasks])
+  }, [filters, showCompleted, tasks])
 
   const taskBuckets = useMemo(() => {
     const buckets: Record<'today' | 'week' | 'none', Task[]> = {
@@ -460,8 +462,8 @@ function TasksPage() {
   }, [tasks])
 
   return (
-    <div className="min-h-screen bg-slate-50 px-3 py-6 text-slate-900 sm:px-5">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4">
+    <div className="flex min-h-screen flex-col bg-slate-50 px-3 py-6 text-slate-900 sm:px-5">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4">
         <header className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm backdrop-blur md:flex-row md:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-primary-700">Tareas</p>
@@ -483,8 +485,8 @@ function TasksPage() {
           )}
         </header>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur">
-          <div className="space-y-4">
+        <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur">
+          <div className="flex h-full flex-col gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="search"
@@ -493,6 +495,15 @@ function TasksPage() {
                 placeholder="Buscar tarea o cliente…"
                 className="w-56 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
+              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showCompleted}
+                  onChange={(e) => setShowCompleted(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
+                />
+                Mostrar completadas
+              </label>
               <select
                 value={filters.client}
                 onChange={(e) => setFilters((prev) => ({ ...prev, client: e.target.value }))}
@@ -519,7 +530,7 @@ function TasksPage() {
               </p>
             )}
             {!loading && (
-              <div className="grid max-h-[560px] gap-4 overflow-y-auto px-2 py-2 md:grid-cols-3">
+              <div className="grid flex-1 gap-4 overflow-y-auto px-2 py-2 md:grid-cols-3">
                 {columns.map((column) => {
                   return (
                     <div
