@@ -30,13 +30,6 @@ const sortTasks = (list: Task[]) =>
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
 
-const formatDate = (value: string) => {
-  if (!value) return ''
-  return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).format(
-    new Date(value),
-  )
-}
-
 function HomePage() {
   const { authHeaders, user } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
