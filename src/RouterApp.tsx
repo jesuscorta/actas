@@ -14,7 +14,6 @@ import { DEFAULT_CLIENTS } from './constants/clients'
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
   : ''
-const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
 
 type ActaNote = {
   id: string
@@ -165,7 +164,6 @@ function Header() {
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders(),
-          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
         },
         body: JSON.stringify({
           notes: notesToSave,
@@ -366,21 +364,12 @@ function Header() {
             <>
               <div className="hidden items-center gap-3 md:flex">
                 <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1">
-                  {user.picture ? (
-                    <img
-                      src={user.picture}
-                      alt={user.name}
-                      className="h-8 w-8 rounded-full border border-slate-200 object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
                   <div className="flex flex-col leading-tight">
                     <span className="text-sm font-semibold text-slate-900">{user.name}</span>
-                    <span className="text-xs text-slate-500">{user.email}</span>
+                  <span className="text-xs text-slate-500">{user.email}</span>
                   </div>
                 </div>
                 <button
@@ -393,18 +382,9 @@ function Header() {
               </div>
 
               <div className="flex items-center gap-2 md:hidden">
-                {user.picture ? (
-                  <img
-                    src={user.picture}
-                    alt={user.name}
-                    className="h-9 w-9 rounded-full border border-slate-200 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-300 text-sm font-bold text-slate-800">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
                 <button
                   type="button"
                   onClick={signOut}

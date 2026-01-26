@@ -8,11 +8,10 @@
 
 ## Sincronización con API
 - **Endpoint**: si existe `VITE_API_BASE_URL`, la app sincroniza estado completo (notes + clients + quickNotes + tasks) con `GET/PUT {VITE_API_BASE_URL}/api/state`. Si no está definido, solo usa IndexedDB.
-- **Backend**: `server/index.js` (Express + MySQL). Tabla `app_state_users` guarda JSON `{notes, clients, quickNotes, tasks}` por email de usuario (PK `email`). Rutas: `/api/health`, `/api/state` (GET/PUT).
-- **Seguridad API**: acepta `Authorization: Bearer {id_token_google}` (verificado contra `GOOGLE_CLIENT_ID`, dominio/allowlist opcional). `API_KEY` queda como fallback; si ninguno está configurado, no hay auth (solo para dev local).
-- **Frontend**: `VITE_GOOGLE_CLIENT_ID` habilita login Google y envía el ID token en cada llamada (cabecera `Authorization: Bearer …`). `VITE_API_KEY` opcional añade `x-api-key`.
-- **Env backend**: `DB_HOST`, `DB_PORT` (3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT` (3000), `CORS_ORIGIN`, `API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_ALLOWED_EMAILS`, `GOOGLE_ALLOWED_DOMAIN`, `MIGRATION_DEFAULT_OWNER` (asigna estado legacy al primer usuario).
-  - **Nota**: `google-auth-library` es dependencia del backend y debe estar instalada.
+- **Backend**: `server/index.js` (Express + MySQL). Tablas por entidad: `actas`, `acta_tasks`, `quick_notes`, `tasks`, `clients`, `users`. Rutas: `/api/health`, `/api/login` y `/api/state` (GET/PUT).
+- **Seguridad API**: login con usuario/contraseña y JWT (cabecera `Authorization: Bearer …`). Si no hay `JWT_SECRET`/usuario en env, no hay auth (solo para dev local).
+- **Frontend**: `VITE_API_BASE_URL` activa el login; el token JWT se guarda en `localStorage` y se envía en cada llamada.
+- **Env backend**: `DB_HOST`, `DB_PORT` (3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT` (3000), `CORS_ORIGIN`, `JWT_SECRET`, `JWT_TTL` (opcional), `APP_USER_EMAIL`, `APP_USER_PASSWORD`.
 
 ## Build y contenedores
 - **Frontend**: `npm run dev/build/preview/lint`. Docker multistage (`Dockerfile`) build con Vite; Nginx sirve `dist` sin autenticación adicional.
@@ -25,15 +24,13 @@
 - **Deshacer**: actas y notas permiten deshacer eliminación durante 5s (sin confirm modal).
 
 ## Estado en Dokploy (VPS)
-*(Rellenar/confirmar con los datos actuales del panel de Dokploy)*  
-- Dominios/hosts activos para frontend y API: _pendiente_.  
-- Variables de entorno cargadas: _pendiente_.  
-- Credenciales MySQL/host/db usados: _pendiente_.  
-- Imagenes/containers desplegados (frontend/backend) y versiones: _pendiente_.  
-- Backups/snapshots configurados: _pendiente_.  
-- Observaciones pendientes: _pendiente_.  
+- **Frontend**: configurar `VITE_API_BASE_URL` apuntando al backend.
+- **Backend**: definir `DB_*`, `JWT_SECRET`, `JWT_TTL` (opcional), `APP_USER_EMAIL`, `APP_USER_PASSWORD`, `CORS_ORIGIN`, `PORT`.
+- **Arranque**: el backend crea tablas automáticamente en el primer arranque.
+- **Credenciales**: si cambias `APP_USER_EMAIL` o `APP_USER_PASSWORD`, elimina el usuario actual en `users` o crea uno nuevo.
+- **Seguridad**: rota tokens/secretos si se compartieron en algún momento.
 
 ## Qué revisar rápido
 - Si no sincroniza: comprobar `VITE_API_BASE_URL` en build y que `/api/state` responde.
-- Si falta persistencia en servidor: confirmar MySQL accesible desde backend (variables env correctas y tabla `app_state` creada automáticamente).
-- Si hay 401: revisar `GOOGLE_CLIENT_ID` y allowlist (`GOOGLE_ALLOWED_EMAILS`/`GOOGLE_ALLOWED_DOMAIN`).
+- Si falta persistencia en servidor: confirmar MySQL accesible desde backend (variables env correctas y tablas creadas automáticamente).
+- Si hay 401: revisar `JWT_SECRET`, `APP_USER_EMAIL` y `APP_USER_PASSWORD`.

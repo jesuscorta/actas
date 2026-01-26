@@ -13,7 +13,6 @@ import { useAuth } from './auth'
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')
   : ''
-const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
 
 type QuickNote = {
   id: string
@@ -141,7 +140,6 @@ function NotasPage() {
       const res = await fetch(`${API_BASE}/api/state`, {
         headers: {
           ...authHeaders(),
-          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
         },
       })
       if (!res.ok) {
@@ -305,7 +303,6 @@ function NotasPage() {
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders(),
-          ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
         },
         body: JSON.stringify({
           notes: actasToSave,

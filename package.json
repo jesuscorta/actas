@@ -17,7 +17,6 @@
     "@tiptap/react": "^3.13.0",
     "@tiptap/starter-kit": "^3.13.0",
     "@tiptap/suggestion": "^3.13.0",
-    "google-auth-library": "^10.5.0",
     "localforage": "^1.10.0",
     "nanoid": "^5.1.6",
     "papaparse": "^5.5.3",

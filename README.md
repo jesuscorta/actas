@@ -75,7 +75,7 @@ export default defineConfig([
 
 ## API (Node + MySQL)
 
-The API lives in `server/` and stores the full app state (notes + clients) in MySQL.
+The API lives in `server/` and stores the full app state (notes + clients + tasks) in MySQL.
 
 Environment variables:
 - `DB_HOST` (e.g. `db`)
@@ -85,13 +85,10 @@ Environment variables:
 - `DB_NAME` (e.g. `mysql` or your own db name)
 - `PORT` (default `3000`)
 - `CORS_ORIGIN` (frontend URL or `*`)
-- `API_KEY` (string; if set, all API rutas salvo `/api/health` requieren `x-api-key` o `Authorization: Bearer {API_KEY}`)
-- `GOOGLE_CLIENT_ID` (obligatorio para login con Google)
-- `GOOGLE_ALLOWED_EMAILS` (opcional, coma-separado para restringir emails exactos)
-- `GOOGLE_ALLOWED_DOMAIN` (opcional, restringe al dominio indicado; p.ej. `jesuscorta.es`)
-- `MIGRATION_DEFAULT_OWNER` (opcional; email al que se asigna el estado legacy `app_state` la primera vez, por defecto `jesus.cortacero@sidn.es`)
+- `JWT_SECRET` (obligatorio si quieres auth)
+- `JWT_TTL` (opcional; default `7d`)
+- `APP_USER_EMAIL` (email del usuario único)
+- `APP_USER_PASSWORD` (contraseña del usuario único)
 
 Frontend env:
 - `VITE_API_BASE_URL` (e.g. `https://api.actas-dev.jesuscorta.es`)
-- `VITE_API_KEY` (opcional; si se define, el frontend envía `x-api-key` con este valor en las llamadas a la API)
-- `VITE_GOOGLE_CLIENT_ID` (mismo valor que `GOOGLE_CLIENT_ID` para que el botón de login funcione)
