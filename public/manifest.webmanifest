@@ -14,14 +14,9 @@
       "type": "image/png"
     },
     {
-      "src": "/pwa-512.png",
+      "src": "/icon.png",
       "sizes": "512x512",
       "type": "image/png"
-    },
-    {
-      "src": "/pwa-icon.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
     }
   ]
 }
